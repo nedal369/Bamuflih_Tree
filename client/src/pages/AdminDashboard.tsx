@@ -290,11 +290,8 @@ function UsersTab({ members }: { members: Member[] }) {
     rejected: 'bg-danger/10 text-danger',
   };
   const statusLabels: Record<string, string> = { pending: 'بانتظار', approved: 'مقبول', rejected: 'مرفوض' };
-  const permLabels: Record<string, string> = { full_tree: 'جميع الشجرة', own_subtree: 'شجرته فقط', custom_subtrees: 'شجرات مخصصة' };
-
   // Branch roots for subtree selection
   const branchRoots = members.filter(m => m.generation === 2 && m.gender === 'male');
-  const memberIdToName = new Map(members.map(m => [m.id, m.name]));
 
   if (loading) return <LoadingSpinner />;
 
