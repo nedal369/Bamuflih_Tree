@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
-import { getMembersTree, getMemberSubtree } from '../../services/api';
+import { getMembersTree, getMemberSubtree, createMember, addMarriage } from '../../services/api';
 import type { TreeNode, SubtreeResponse, Marriage } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Modal from '../common/Modal';
 import SubTreeView from './SubTreeView';
+
+interface QuickAddState {
+  mode: 'child' | 'wife' | 'sibling';
+  memberId: number;
+  memberName: string;
+  fatherId: number | null;
+  generation: number;
+}
 
 export default function FamilyTree() {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -14,7 +23,14 @@ export default function FamilyTree() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMember, setSelectedMember] = useState<SubtreeResponse | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [quickAdd, setQuickAdd] = useState<QuickAddState | null>(null);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddGender, setQuickAddGender] = useState<'male' | 'female'>('male');
+  const [quickAddStatus, setQuickAddStatus] = useState<'married' | 'divorced' | 'widowed' | 'deceased'>('married');
+  const [quickAddLoading, setQuickAddLoading] = useState(false);
+  const [quickAddError, setQuickAddError] = useState('');
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const { isAuthenticated } = useAuth();
 
   const loadTree = useCallback(async () => {
     try {
@@ -38,6 +54,52 @@ export default function FamilyTree() {
       setShowModal(true);
     } catch (err) {
       console.error('Error loading subtree:', err);
+    }
+  };
+
+  const openQuickAdd = (mode: QuickAddState['mode'], memberId: number, memberName: string, fatherId: number | null, generation: number) => {
+    setQuickAdd({ mode, memberId, memberName, fatherId, generation });
+    setQuickAddName('');
+    setQuickAddGender('male');
+    setQuickAddStatus('married');
+    setQuickAddError('');
+  };
+
+  const handleQuickAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAdd || !quickAddName.trim()) return;
+
+    setQuickAddLoading(true);
+    setQuickAddError('');
+
+    try {
+      if (quickAdd.mode === 'child') {
+        await createMember({
+          name: quickAddName.trim(),
+          father_id: quickAdd.memberId,
+          gender: quickAddGender,
+          generation: quickAdd.generation + 1,
+        });
+      } else if (quickAdd.mode === 'wife') {
+        await addMarriage(quickAdd.memberId, {
+          wife_name: quickAddName.trim(),
+          status: quickAddStatus,
+        });
+      } else if (quickAdd.mode === 'sibling') {
+        await createMember({
+          name: quickAddName.trim(),
+          father_id: quickAdd.fatherId,
+          gender: quickAddGender,
+          generation: quickAdd.generation,
+        });
+      }
+
+      setQuickAdd(null);
+      await loadTree();
+    } catch (err: any) {
+      setQuickAddError(err.response?.data?.error || 'حدث خطأ أثناء الإضافة');
+    } finally {
+      setQuickAddLoading(false);
     }
   };
 
@@ -78,7 +140,6 @@ export default function FamilyTree() {
     const treeLayout = d3.tree<TreeNode>()
       .nodeSize([nodeWidth, nodeHeight])
       .separation((a, b) => {
-        // More space if node has wives
         const aWives = (a.data.marriages?.length || 0);
         const bWives = (b.data.marriages?.length || 0);
         const extra = Math.max(aWives, bWives) * 0.3;
@@ -132,11 +193,7 @@ export default function FamilyTree() {
       .join('g')
       .attr('class', 'tree-node')
       .attr('transform', d => `translate(${d.x},${d.y})`)
-      .attr('opacity', 0)
-      .style('cursor', 'pointer')
-      .on('click', (_, d) => {
-        if (d.data.id !== 0) handleNodeClick(d.data.id);
-      });
+      .attr('opacity', 0);
 
     nodes.transition()
       .duration(600)
@@ -147,7 +204,9 @@ export default function FamilyTree() {
     const cardW = 200;
     const cardH = 70;
 
+    // Card background - clickable area
     nodes.append('rect')
+      .attr('class', 'node-card')
       .attr('x', -cardW / 2)
       .attr('y', -cardH / 2)
       .attr('width', cardW)
@@ -159,7 +218,12 @@ export default function FamilyTree() {
         return genColors[(d.data.generation || 0) % genColors.length];
       })
       .attr('stroke-width', d => (searchQuery && d.data.name.includes(searchQuery)) ? 3 : 1.5)
-      .attr('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.06))');
+      .attr('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.06))')
+      .style('cursor', 'pointer')
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (d.data.id !== 0) handleNodeClick(d.data.id);
+      });
 
     // Deceased icon
     nodes.filter(d => !!(d.data.death_date))
@@ -176,7 +240,8 @@ export default function FamilyTree() {
       .attr('cy', -5)
       .attr('r', 10)
       .attr('fill', d => d.data.gender === 'female' ? '#FF2D55' : '#007AFF')
-      .attr('opacity', 0.15);
+      .attr('opacity', 0.15)
+      .style('pointer-events', 'none');
 
     nodes.append('text')
       .attr('x', -cardW / 2 + 18)
@@ -184,14 +249,14 @@ export default function FamilyTree() {
       .attr('text-anchor', 'middle')
       .attr('font-size', '12px')
       .text(d => d.data.gender === 'female' ? '♀' : '♂')
-      .attr('fill', d => d.data.gender === 'female' ? '#FF2D55' : '#007AFF');
+      .attr('fill', d => d.data.gender === 'female' ? '#FF2D55' : '#007AFF')
+      .style('pointer-events', 'none');
 
     // Full name - wrap text
     nodes.each(function(d) {
       const node = d3.select(this);
       const name = d.data.name;
 
-      // Split name if too long
       const words = name.split(' ');
       let lines: string[] = [];
       let current = '';
@@ -217,6 +282,7 @@ export default function FamilyTree() {
           .attr('font-size', '12px')
           .attr('font-weight', '700')
           .attr('fill', d.data.death_date ? '#999' : '#1D1D1F')
+          .style('pointer-events', 'none')
           .text(line);
       });
 
@@ -228,6 +294,7 @@ export default function FamilyTree() {
         .attr('font-family', 'Tajawal, sans-serif')
         .attr('font-size', '9px')
         .attr('fill', '#86868B')
+        .style('pointer-events', 'none')
         .text(d.data.generation ? `الجيل ${d.data.generation}` : '');
     });
 
@@ -244,7 +311,7 @@ export default function FamilyTree() {
         const isDivorced = marriage.status === 'divorced';
         const isDeceased = marriage.status === 'deceased' || marriage.status === 'widowed';
 
-        // Connection line (husband to wife)
+        // Connection line
         node.append('line')
           .attr('x1', -cardW / 2)
           .attr('y1', 0)
@@ -269,6 +336,7 @@ export default function FamilyTree() {
           .attr('text-anchor', 'middle')
           .attr('font-size', '8px')
           .attr('fill', 'white')
+          .style('pointer-events', 'none')
           .text(isDivorced ? '✕' : '♥');
 
         // Wife card
@@ -317,6 +385,7 @@ export default function FamilyTree() {
             .attr('font-weight', '600')
             .attr('fill', isDivorced ? '#BBB' : (isDeceased ? '#999' : '#C2185B'))
             .attr('opacity', isDivorced ? 0.6 : 1)
+            .style('pointer-events', 'none')
             .text(line);
         });
 
@@ -329,20 +398,135 @@ export default function FamilyTree() {
           .attr('font-family', 'Tajawal, sans-serif')
           .attr('font-size', '8px')
           .attr('fill', isDivorced ? '#CCC' : '#86868B')
+          .style('pointer-events', 'none')
           .text(statusLabels[marriage.status] || '');
       });
     });
 
-    // Hover effects
-    nodes
+    // Quick-add buttons (only for authenticated users)
+    if (isAuthenticated) {
+      nodes.each(function(d) {
+        if (d.data.id === 0) return; // Skip virtual root
+        const node = d3.select(this);
+        const btnR = 11;
+
+        // "+" button BELOW for adding child (only for males)
+        if (d.data.gender === 'male') {
+          const childBtn = node.append('g')
+            .attr('class', 'quick-add-btn')
+            .attr('transform', `translate(0, ${cardH / 2 + 18})`)
+            .style('cursor', 'pointer')
+            .attr('opacity', 0.4)
+            .on('mouseenter', function() { d3.select(this).attr('opacity', 1); })
+            .on('mouseleave', function() { d3.select(this).attr('opacity', 0.4); })
+            .on('click', (event) => {
+              event.stopPropagation();
+              openQuickAdd('child', d.data.id, d.data.name, d.data.father_id, d.data.generation || 1);
+            });
+
+          childBtn.append('circle')
+            .attr('r', btnR)
+            .attr('fill', '#34C759')
+            .attr('stroke', 'white')
+            .attr('stroke-width', 2)
+            .attr('filter', 'drop-shadow(0 1px 3px rgba(0,0,0,0.15))');
+
+          childBtn.append('text')
+            .attr('text-anchor', 'middle')
+            .attr('y', 4)
+            .attr('font-size', '14px')
+            .attr('font-weight', '700')
+            .attr('fill', 'white')
+            .style('pointer-events', 'none')
+            .text('+');
+
+          // Tooltip
+          childBtn.append('title').text('إضافة ابن/ابنة');
+        }
+
+        // "+" button to the LEFT for adding wife (only for males)
+        if (d.data.gender === 'male') {
+          const wifeCount = d.data.marriages?.length || 0;
+          const wifeOffset = wifeCount > 0
+            ? -(cardW / 2 + 20 + wifeCount * (cardW * 0.7 + 10) + 10)
+            : -(cardW / 2 + 22);
+
+          const wifeBtn = node.append('g')
+            .attr('class', 'quick-add-btn')
+            .attr('transform', `translate(${wifeOffset}, 0)`)
+            .style('cursor', 'pointer')
+            .attr('opacity', 0.4)
+            .on('mouseenter', function() { d3.select(this).attr('opacity', 1); })
+            .on('mouseleave', function() { d3.select(this).attr('opacity', 0.4); })
+            .on('click', (event) => {
+              event.stopPropagation();
+              openQuickAdd('wife', d.data.id, d.data.name, d.data.father_id, d.data.generation || 1);
+            });
+
+          wifeBtn.append('circle')
+            .attr('r', btnR)
+            .attr('fill', '#FF2D55')
+            .attr('stroke', 'white')
+            .attr('stroke-width', 2)
+            .attr('filter', 'drop-shadow(0 1px 3px rgba(0,0,0,0.15))');
+
+          wifeBtn.append('text')
+            .attr('text-anchor', 'middle')
+            .attr('y', 4)
+            .attr('font-size', '14px')
+            .attr('font-weight', '700')
+            .attr('fill', 'white')
+            .style('pointer-events', 'none')
+            .text('+');
+
+          wifeBtn.append('title').text('إضافة زوجة');
+        }
+
+        // "+" button to the RIGHT for adding sibling (when node has a father)
+        if (d.data.father_id) {
+          const siblingBtn = node.append('g')
+            .attr('class', 'quick-add-btn')
+            .attr('transform', `translate(${cardW / 2 + 22}, 0)`)
+            .style('cursor', 'pointer')
+            .attr('opacity', 0.4)
+            .on('mouseenter', function() { d3.select(this).attr('opacity', 1); })
+            .on('mouseleave', function() { d3.select(this).attr('opacity', 0.4); })
+            .on('click', (event) => {
+              event.stopPropagation();
+              openQuickAdd('sibling', d.data.id, d.data.name, d.data.father_id, d.data.generation || 1);
+            });
+
+          siblingBtn.append('circle')
+            .attr('r', btnR)
+            .attr('fill', '#007AFF')
+            .attr('stroke', 'white')
+            .attr('stroke-width', 2)
+            .attr('filter', 'drop-shadow(0 1px 3px rgba(0,0,0,0.15))');
+
+          siblingBtn.append('text')
+            .attr('text-anchor', 'middle')
+            .attr('y', 4)
+            .attr('font-size', '14px')
+            .attr('font-weight', '700')
+            .attr('fill', 'white')
+            .style('pointer-events', 'none')
+            .text('+');
+
+          siblingBtn.append('title').text('إضافة أخ/أخت');
+        }
+      });
+    }
+
+    // Hover effects on card
+    nodes.selectAll('.node-card')
       .on('mouseenter', function () {
-        d3.select(this).select('rect')
+        d3.select(this)
           .transition().duration(200)
           .attr('filter', 'drop-shadow(0 4px 16px rgba(0,0,0,0.12))')
           .attr('stroke-width', 2.5);
       })
       .on('mouseleave', function () {
-        d3.select(this).select('rect')
+        d3.select(this)
           .transition().duration(200)
           .attr('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.06))')
           .attr('stroke-width', 1.5);
@@ -358,7 +542,7 @@ export default function FamilyTree() {
         );
       }
     }
-  }, [treeData, searchQuery]);
+  }, [treeData, searchQuery, isAuthenticated]);
 
   const handleZoom = (factor: number) => {
     if (!svgRef.current || !zoomRef.current) return;
@@ -367,6 +551,14 @@ export default function FamilyTree() {
   };
 
   if (loading) return <LoadingSpinner size="lg" />;
+
+  const quickAddTitle = quickAdd
+    ? quickAdd.mode === 'child'
+      ? `إضافة ابن/ابنة لـ ${quickAdd.memberName}`
+      : quickAdd.mode === 'wife'
+        ? `إضافة زوجة لـ ${quickAdd.memberName}`
+        : `إضافة أخ/أخت لـ ${quickAdd.memberName}`
+    : '';
 
   return (
     <div className="h-screen flex flex-col">
@@ -404,6 +596,14 @@ export default function FamilyTree() {
           <div className="flex items-center gap-2"><span>🕊️</span><span className="text-text-secondary">متوفى</span></div>
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-pink-500 inline-block"></span><span className="text-text-secondary">زوجة</span></div>
           <div className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-300 inline-block" style={{borderTop: '1px dashed #ccc'}}></span><span className="text-text-secondary">مطلقة</span></div>
+          {isAuthenticated && (
+            <>
+              <hr className="border-gray-200 my-1" />
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500 inline-block"></span><span className="text-text-secondary">+ ابن/ابنة</span></div>
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-pink-600 inline-block"></span><span className="text-text-secondary">+ زوجة</span></div>
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span><span className="text-text-secondary">+ أخ/أخت</span></div>
+            </>
+          )}
         </div>
       </div>
 
@@ -416,6 +616,100 @@ export default function FamilyTree() {
       >
         {selectedMember && (
           <SubTreeView data={selectedMember} onClose={() => setShowModal(false)} />
+        )}
+      </Modal>
+
+      {/* Quick Add Modal */}
+      <Modal
+        isOpen={!!quickAdd}
+        onClose={() => setQuickAdd(null)}
+        title={quickAddTitle}
+        size="sm"
+      >
+        {quickAdd && (
+          <form onSubmit={handleQuickAddSubmit} className="p-4 space-y-4" dir="rtl">
+            {quickAddError && (
+              <div className="bg-red-50 text-red-600 text-sm font-medium px-4 py-3 rounded-xl">{quickAddError}</div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-text mb-2">
+                {quickAdd.mode === 'wife' ? 'اسم الزوجة' : 'الاسم'}
+              </label>
+              <input
+                type="text"
+                value={quickAddName}
+                onChange={e => setQuickAddName(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl border-none text-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200 text-sm"
+                placeholder={quickAdd.mode === 'wife' ? 'مثال: فاطمة محمد' : 'مثال: عبدالله محمد'}
+                required
+                autoFocus
+              />
+            </div>
+
+            {quickAdd.mode !== 'wife' && (
+              <div>
+                <label className="block text-sm font-medium text-text mb-2">الجنس</label>
+                <div className="flex gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="gender"
+                      value="male"
+                      checked={quickAddGender === 'male'}
+                      onChange={() => setQuickAddGender('male')}
+                      className="accent-blue-500"
+                    />
+                    <span className="text-sm">ذكر</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="gender"
+                      value="female"
+                      checked={quickAddGender === 'female'}
+                      onChange={() => setQuickAddGender('female')}
+                      className="accent-pink-500"
+                    />
+                    <span className="text-sm">أنثى</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {quickAdd.mode === 'wife' && (
+              <div>
+                <label className="block text-sm font-medium text-text mb-2">حالة الزواج</label>
+                <select
+                  value={quickAddStatus}
+                  onChange={e => setQuickAddStatus(e.target.value as typeof quickAddStatus)}
+                  className="w-full px-4 py-3 bg-gray-50 rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-blue-200 text-sm"
+                >
+                  <option value="married">متزوج</option>
+                  <option value="divorced">مطلق</option>
+                  <option value="widowed">أرمل</option>
+                  <option value="deceased">متوفاة</option>
+                </select>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={quickAddLoading}
+                className="flex-1 py-3 bg-blue-500 text-white rounded-xl font-medium text-sm hover:bg-blue-600 transition-colors cursor-pointer border-none disabled:opacity-50"
+              >
+                {quickAddLoading ? 'جاري الإضافة...' : 'إضافة'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickAdd(null)}
+                className="px-6 py-3 bg-gray-100 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-200 transition-colors cursor-pointer border-none"
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
         )}
       </Modal>
     </div>
