@@ -76,6 +76,39 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_husband ON marriages(husband_i
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_wife ON marriages(wife_id)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_members_city ON members(city)');
 
+// Auto-seed data if members table is empty
+const memberCount = db.prepare('SELECT COUNT(*) as count FROM members').get().count;
+if (memberCount === 0) {
+  const seedPath = path.join(__dirname, 'seed-data.json');
+  const fs = require('fs');
+  if (fs.existsSync(seedPath)) {
+    console.log('[DB] Members table empty, seeding from seed-data.json...');
+    const seedData = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+
+    const insertMember = db.prepare(`
+      INSERT INTO members (id, name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, generation)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertMarriage = db.prepare(`
+      INSERT INTO marriages (id, husband_id, wife_id, wife_name, status, marriage_order)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const seedAll = db.transaction(() => {
+      for (const m of seedData.members) {
+        insertMember.run(m.id, m.name, m.father_id, m.gender, m.birth_date, m.death_date, m.bio, m.phone, m.mother_name, m.city, m.nationality, m.occupation, m.generation);
+      }
+      for (const mar of seedData.marriages) {
+        insertMarriage.run(mar.id, mar.husband_id, mar.wife_id, mar.wife_name, mar.status, mar.marriage_order);
+      }
+    });
+    seedAll();
+    console.log(`[DB] Seeded ${seedData.members.length} members and ${seedData.marriages.length} marriages`);
+  } else {
+    console.log('[DB] No seed-data.json found, starting with empty database');
+  }
+}
+
 // Ensure admin user exists and is approved
 const bcrypt = require('bcryptjs');
 const existingAdmin = db.prepare('SELECT id, status, role FROM users WHERE username = ?').get('admin');
