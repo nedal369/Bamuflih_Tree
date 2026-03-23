@@ -7,6 +7,8 @@ export interface Member {
   death_date: string | null;
   bio: string | null;
   phone: string | null;
+  mother_name: string | null;
+  spouse_name: string | null;
   generation: number;
   created_at: string;
   updated_at: string;

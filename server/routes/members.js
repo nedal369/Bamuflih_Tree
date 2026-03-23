@@ -79,7 +79,7 @@ router.get('/:id/subtree', (req, res) => {
 
 // Create member (admin only)
 router.post('/', authenticateToken, (req, res) => {
-  const { name, father_id, gender, birth_date, death_date, bio, phone, generation } = req.body;
+  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, spouse_name, generation } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'الاسم مطلوب' });
@@ -93,9 +93,9 @@ router.post('/', authenticateToken, (req, res) => {
   }
 
   const result = db.prepare(`
-    INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, generation)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, gen);
+    INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, mother_name, spouse_name, generation)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, mother_name || null, spouse_name || null, gen);
 
   const newMember = db.prepare('SELECT * FROM members WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(newMember);
@@ -103,7 +103,7 @@ router.post('/', authenticateToken, (req, res) => {
 
 // Update member (admin only)
 router.put('/:id', authenticateToken, (req, res) => {
-  const { name, father_id, gender, birth_date, death_date, bio, phone, generation } = req.body;
+  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, spouse_name, generation } = req.body;
 
   const existing = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);
   if (!existing) {
@@ -112,7 +112,7 @@ router.put('/:id', authenticateToken, (req, res) => {
 
   db.prepare(`
     UPDATE members SET name = ?, father_id = ?, gender = ?, birth_date = ?, death_date = ?,
-    bio = ?, phone = ?, generation = ?, updated_at = CURRENT_TIMESTAMP
+    bio = ?, phone = ?, mother_name = ?, spouse_name = ?, generation = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
     name || existing.name,
@@ -122,6 +122,8 @@ router.put('/:id', authenticateToken, (req, res) => {
     death_date !== undefined ? death_date : existing.death_date,
     bio !== undefined ? bio : existing.bio,
     phone !== undefined ? phone : existing.phone,
+    mother_name !== undefined ? mother_name : existing.mother_name,
+    spouse_name !== undefined ? spouse_name : existing.spouse_name,
     generation || existing.generation,
     req.params.id
   );

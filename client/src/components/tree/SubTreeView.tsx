@@ -111,11 +111,16 @@ export default function SubTreeView({ data, onClose: _onClose }: Props) {
               <div className={`w-3 h-3 rounded-full ${data.member.gender === 'female' ? 'bg-pink-500' : 'bg-primary'}`} />
               <h3 className="text-xl font-bold text-text m-0">{data.member.name}</h3>
             </div>
-            <div className="flex items-center gap-4 text-sm text-text-secondary">
+            <div className="flex items-center gap-4 text-sm text-text-secondary flex-wrap">
               <span>الجيل: {data.member.generation}</span>
               {data.member.birth_date && <span>الميلاد: {data.member.birth_date}</span>}
               {data.member.death_date && <span>الوفاة: {data.member.death_date}</span>}
+              {data.member.spouse_name && <span>الزوج/ة: {data.member.spouse_name}</span>}
+              {data.member.mother_name && <span>الأم: {data.member.mother_name}</span>}
             </div>
+            {data.member.bio && (
+              <div className="mt-1 text-sm text-text-secondary">{data.member.bio}</div>
+            )}
             {data.ancestors.length > 0 && (
               <div className="mt-2 text-sm text-text-secondary">
                 <span className="font-medium">السلسلة: </span>

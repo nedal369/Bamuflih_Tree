@@ -31,6 +31,8 @@ function MemberForm({
     death_date: member?.death_date || '',
     bio: member?.bio || '',
     phone: member?.phone || '',
+    mother_name: member?.mother_name || '',
+    spouse_name: member?.spouse_name || '',
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -89,6 +91,27 @@ function MemberForm({
             value={form.phone}
             onChange={e => setForm({ ...form, phone: e.target.value })}
             className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">الأم</label>
+          <input
+            value={form.mother_name}
+            onChange={e => setForm({ ...form, mother_name: e.target.value })}
+            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+            placeholder="اسم الأم"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">الزوج/الزوجة</label>
+          <input
+            value={form.spouse_name}
+            onChange={e => setForm({ ...form, spouse_name: e.target.value })}
+            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+            placeholder="اسم الزوج/الزوجة"
           />
         </div>
       </div>

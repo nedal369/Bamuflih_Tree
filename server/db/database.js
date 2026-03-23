@@ -17,6 +17,8 @@ db.exec(`
     death_date TEXT,
     bio TEXT,
     phone TEXT,
+    mother_name TEXT,
+    spouse_name TEXT,
     generation INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
