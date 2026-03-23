@@ -25,8 +25,14 @@ router.post('/login', (req, res) => {
   }
 
   // Admin always allowed; others must be approved
-  if (user.role !== 'admin') {
-    if (user.status === 'pending') {
+  if (user.role === 'admin') {
+    // Auto-fix admin status if needed
+    if (user.status !== 'approved') {
+      db.prepare('UPDATE users SET status = ? WHERE id = ?').run('approved', user.id);
+      user.status = 'approved';
+    }
+  } else {
+    if (!user.status || user.status === 'pending') {
       return res.status(403).json({ error: 'حسابك بانتظار الموافقة من الإدارة' });
     }
     if (user.status === 'rejected') {

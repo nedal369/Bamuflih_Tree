@@ -84,8 +84,11 @@ if (!existingAdmin) {
   db.prepare('INSERT INTO users (username, password_hash, full_name, role, status) VALUES (?, ?, ?, ?, ?)').run(
     'admin', passwordHash, 'مدير النظام', 'admin', 'approved'
   );
-} else if (existingAdmin.status !== 'approved' || existingAdmin.role !== 'admin') {
+  console.log('[DB] Admin user created (admin/admin123)');
+} else {
+  // Always force admin to be approved with admin role
   db.prepare('UPDATE users SET role = ?, status = ? WHERE username = ?').run('admin', 'approved', 'admin');
+  console.log('[DB] Admin user ensured approved, was:', existingAdmin.role, existingAdmin.status);
 }
 
 module.exports = db;
