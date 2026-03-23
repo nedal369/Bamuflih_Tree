@@ -76,4 +76,16 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_husband ON marriages(husband_i
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_wife ON marriages(wife_id)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_members_city ON members(city)');
 
+// Ensure admin user exists and is approved
+const bcrypt = require('bcryptjs');
+const existingAdmin = db.prepare('SELECT id, status, role FROM users WHERE username = ?').get('admin');
+if (!existingAdmin) {
+  const passwordHash = bcrypt.hashSync('admin123', 10);
+  db.prepare('INSERT INTO users (username, password_hash, full_name, role, status) VALUES (?, ?, ?, ?, ?)').run(
+    'admin', passwordHash, 'مدير النظام', 'admin', 'approved'
+  );
+} else if (existingAdmin.status !== 'approved' || existingAdmin.role !== 'admin') {
+  db.prepare('UPDATE users SET role = ?, status = ? WHERE username = ?').run('admin', 'approved', 'admin');
+}
+
 module.exports = db;

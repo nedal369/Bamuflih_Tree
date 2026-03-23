@@ -24,11 +24,14 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
   }
 
-  if (user.status === 'pending') {
-    return res.status(403).json({ error: 'حسابك بانتظار الموافقة من الإدارة' });
-  }
-  if (user.status === 'rejected') {
-    return res.status(403).json({ error: 'تم رفض حسابك' });
+  // Admin always allowed; others must be approved
+  if (user.role !== 'admin') {
+    if (user.status === 'pending') {
+      return res.status(403).json({ error: 'حسابك بانتظار الموافقة من الإدارة' });
+    }
+    if (user.status === 'rejected') {
+      return res.status(403).json({ error: 'تم رفض حسابك' });
+    }
   }
 
   const token = jwt.sign(
