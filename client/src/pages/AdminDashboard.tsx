@@ -1,27 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  getMembers,
-  createMember,
-  updateMember,
-  deleteMember,
-  uploadExcel,
-  importExcelData,
+  getMembers, createMember, updateMember, deleteMember,
+  uploadExcel, importExcelData, getUsers, updateUserStatus, deleteUser,
+  addMarriage, deleteMarriage,
 } from '../services/api';
-import type { Member, ExcelUploadResponse } from '../types';
+import type { Member, ExcelUploadResponse, User, Marriage } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import Modal from '../components/common/Modal';
 
 /* ─── Member Form ─── */
-function MemberForm({
-  member,
-  allMembers,
-  onSave,
-  onCancel,
-}: {
-  member?: Member;
-  allMembers: Member[];
-  onSave: (data: Partial<Member>) => void;
-  onCancel: () => void;
+function MemberForm({ member, allMembers, onSave, onCancel }: {
+  member?: Member; allMembers: Member[];
+  onSave: (data: Partial<Member>) => void; onCancel: () => void;
 }) {
   const [form, setForm] = useState({
     name: member?.name || '',
@@ -32,130 +22,196 @@ function MemberForm({
     bio: member?.bio || '',
     phone: member?.phone || '',
     mother_name: member?.mother_name || '',
-    spouse_name: member?.spouse_name || '',
+    city: member?.city || '',
+    nationality: member?.nationality || '',
+    occupation: member?.occupation || '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave({
-      ...form,
-      father_id: form.father_id ? Number(form.father_id) : null,
-    } as Partial<Member>);
-  };
-
   return (
-    <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <form onSubmit={e => { e.preventDefault(); onSave({ ...form, father_id: form.father_id ? Number(form.father_id) : null } as Partial<Member>); }} className="p-6 space-y-4">
       <div>
         <label className="block text-sm font-medium text-text mb-1">الاسم *</label>
-        <input
-          value={form.name}
-          onChange={e => setForm({ ...form, name: e.target.value })}
-          className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-          required
-        />
+        <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" required />
       </div>
-
       <div>
         <label className="block text-sm font-medium text-text mb-1">الأب</label>
-        <select
-          value={form.father_id}
-          onChange={e => setForm({ ...form, father_id: e.target.value })}
-          className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-        >
+        <select value={form.father_id} onChange={e => setForm({ ...form, father_id: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
           <option value="">بدون أب</option>
-          {allMembers
-            .filter(m => m.id !== member?.id)
-            .map(m => (
-              <option key={m.id} value={m.id}>
-                {m.name} (الجيل {m.generation})
-              </option>
-            ))}
+          {allMembers.filter(m => m.id !== member?.id).map(m => (
+            <option key={m.id} value={m.id}>{m.name} (الجيل {m.generation})</option>
+          ))}
         </select>
       </div>
-
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الجنس</label>
-          <select
-            value={form.gender}
-            onChange={e => setForm({ ...form, gender: e.target.value as 'male' | 'female' })}
-            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-          >
+          <select value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value as 'male' | 'female' })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
             <option value="male">ذكر</option>
             <option value="female">أنثى</option>
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-text mb-1">الهاتف</label>
-          <input
-            value={form.phone}
-            onChange={e => setForm({ ...form, phone: e.target.value })}
-            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-          />
+          <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
         </div>
       </div>
-
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الأم</label>
-          <input
-            value={form.mother_name}
-            onChange={e => setForm({ ...form, mother_name: e.target.value })}
-            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-            placeholder="اسم الأم"
-          />
+          <input value={form.mother_name} onChange={e => setForm({ ...form, mother_name: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-text mb-1">الزوج/الزوجة</label>
-          <input
-            value={form.spouse_name}
-            onChange={e => setForm({ ...form, spouse_name: e.target.value })}
-            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-            placeholder="اسم الزوج/الزوجة"
-          />
+          <label className="block text-sm font-medium text-text mb-1">المدينة</label>
+          <input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="مكة، جدة، المدينة..." />
         </div>
       </div>
-
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">الجنسية</label>
+          <input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="سعودي، يمني..." />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">العمل</label>
+          <input value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">تاريخ الميلاد</label>
-          <input
-            value={form.birth_date}
-            onChange={e => setForm({ ...form, birth_date: e.target.value })}
-            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-            placeholder="1990"
-          />
+          <input value={form.birth_date} onChange={e => setForm({ ...form, birth_date: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
         </div>
         <div>
           <label className="block text-sm font-medium text-text mb-1">تاريخ الوفاة</label>
-          <input
-            value={form.death_date}
-            onChange={e => setForm({ ...form, death_date: e.target.value })}
-            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-            placeholder="فارغ = على قيد الحياة"
-          />
+          <input value={form.death_date} onChange={e => setForm({ ...form, death_date: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="فارغ = على قيد الحياة" />
         </div>
       </div>
-
       <div>
-        <label className="block text-sm font-medium text-text mb-1">السيرة</label>
-        <textarea
-          value={form.bio}
-          onChange={e => setForm({ ...form, bio: e.target.value })}
-          rows={3}
-          className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm resize-none"
-        />
+        <label className="block text-sm font-medium text-text mb-1">ملاحظات</label>
+        <textarea value={form.bio} onChange={e => setForm({ ...form, bio: e.target.value })} rows={2} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm resize-none" />
       </div>
-
       <div className="flex gap-3 pt-2">
-        <button type="submit" className="flex-1 py-3 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary-dark transition-colors cursor-pointer border-none">
-          {member ? 'تحديث' : 'إضافة'}
-        </button>
-        <button type="button" onClick={onCancel} className="px-6 py-3 bg-surface text-text rounded-xl font-medium text-sm hover:bg-surface-dark transition-colors cursor-pointer border-none">
-          إلغاء
-        </button>
+        <button type="submit" className="flex-1 py-3 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary-dark transition-colors cursor-pointer border-none">{member ? 'تحديث' : 'إضافة'}</button>
+        <button type="button" onClick={onCancel} className="px-6 py-3 bg-surface text-text rounded-xl font-medium text-sm cursor-pointer border-none">إلغاء</button>
       </div>
     </form>
+  );
+}
+
+/* ─── Marriage Form ─── */
+function MarriageForm({ memberId, onDone }: { memberId: number; onDone: () => void }) {
+  const [wifeName, setWifeName] = useState('');
+  const [status, setStatus] = useState<Marriage['status']>('married');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await addMarriage(memberId, { wife_name: wifeName, status });
+    setWifeName('');
+    onDone();
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-2 items-end">
+      <input value={wifeName} onChange={e => setWifeName(e.target.value)} placeholder="اسم الزوجة" required className="flex-1 px-3 py-2 bg-surface rounded-lg border-none text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+      <select value={status} onChange={e => setStatus(e.target.value as Marriage['status'])} className="px-3 py-2 bg-surface rounded-lg border-none text-sm">
+        <option value="married">متزوج</option>
+        <option value="divorced">مطلق</option>
+        <option value="widowed">أرمل</option>
+        <option value="deceased">متوفاة</option>
+      </select>
+      <button type="submit" className="px-4 py-2 bg-pink-500 text-white rounded-lg text-sm font-medium cursor-pointer border-none">+</button>
+    </form>
+  );
+}
+
+/* ─── Users Management ─── */
+function UsersTab({ members }: { members: Member[] }) {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadUsers = useCallback(async () => {
+    try { setUsers(await getUsers()); } catch { } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  const handleApprove = async (id: number, memberId?: number) => {
+    await updateUserStatus(id, { status: 'approved', role: 'member', member_id: memberId || null });
+    loadUsers();
+  };
+
+  const handleReject = async (id: number) => {
+    await updateUserStatus(id, { status: 'rejected' });
+    loadUsers();
+  };
+
+  const handleDelete = async (id: number) => {
+    await deleteUser(id);
+    loadUsers();
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: 'bg-warning/10 text-warning',
+    approved: 'bg-success/10 text-success',
+    rejected: 'bg-danger/10 text-danger',
+  };
+  const statusLabels: Record<string, string> = { pending: 'بانتظار', approved: 'مقبول', rejected: 'مرفوض' };
+
+  if (loading) return <LoadingSpinner />;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-surface/50 border-b border-gray-100">
+              <th className="px-4 py-3 text-start font-medium text-text-secondary">المستخدم</th>
+              <th className="px-4 py-3 text-start font-medium text-text-secondary">الاسم</th>
+              <th className="px-4 py-3 text-start font-medium text-text-secondary">الحالة</th>
+              <th className="px-4 py-3 text-start font-medium text-text-secondary">العضو المرتبط</th>
+              <th className="px-4 py-3 text-start font-medium text-text-secondary">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.id} className="border-b border-gray-50">
+                <td className="px-4 py-3 font-medium">{u.username}</td>
+                <td className="px-4 py-3 text-text-secondary">{u.full_name || '—'}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-1 rounded-lg text-xs font-medium ${statusColors[u.status] || ''}`}>
+                    {statusLabels[u.status] || u.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  {u.role === 'admin' ? <span className="text-primary font-medium text-xs">مدير</span> : (
+                    <select
+                      value={u.member_id || ''}
+                      onChange={e => handleApprove(u.id, e.target.value ? Number(e.target.value) : undefined)}
+                      className="px-2 py-1 bg-surface rounded-lg border-none text-xs"
+                    >
+                      <option value="">غير مرتبط</option>
+                      {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {u.role !== 'admin' && (
+                    <div className="flex gap-1">
+                      {u.status === 'pending' && (
+                        <>
+                          <button onClick={() => handleApprove(u.id)} className="px-2 py-1 bg-success/10 text-success rounded-lg text-xs font-medium cursor-pointer border-none">قبول</button>
+                          <button onClick={() => handleReject(u.id)} className="px-2 py-1 bg-danger/10 text-danger rounded-lg text-xs font-medium cursor-pointer border-none">رفض</button>
+                        </>
+                      )}
+                      <button onClick={() => handleDelete(u.id)} className="px-2 py-1 bg-gray-100 text-gray-500 rounded-lg text-xs cursor-pointer border-none">حذف</button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -169,124 +225,52 @@ function ExcelImport({ onDone }: { onDone: () => void }) {
 
   const handleFile = async (file: File) => {
     setUploading(true);
-    try {
-      const data = await uploadExcel(file);
-      setPreview(data);
-    } catch {
-      alert('خطأ في رفع الملف');
-    } finally {
-      setUploading(false);
-    }
+    try { setPreview(await uploadExcel(file)); } catch { alert('خطأ في رفع الملف'); } finally { setUploading(false); }
   };
 
   const handleImport = async () => {
     if (!preview) return;
     setImporting(true);
-    try {
-      const res = await importExcelData(preview.data);
-      setResult(res);
-      onDone();
-    } catch {
-      alert('خطأ في الاستيراد');
-    } finally {
-      setImporting(false);
-    }
+    try { setResult(await importExcelData(preview.data)); onDone(); } catch { alert('خطأ في الاستيراد'); } finally { setImporting(false); }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  };
+  if (result) return (
+    <div className="p-6">
+      <div className="bg-success/10 text-success rounded-xl p-4 mb-4">تم استيراد {result.imported} عضو بنجاح</div>
+      {result.errors.length > 0 && (
+        <div className="bg-danger/10 text-danger rounded-xl p-4">
+          {result.errors.map((e, i) => <p key={i} className="text-sm">{e.name}: {e.error}</p>)}
+        </div>
+      )}
+    </div>
+  );
 
-  if (result) {
-    return (
-      <div className="p-6">
-        <div className="bg-success/10 text-success rounded-xl p-4 mb-4">
-          تم استيراد {result.imported} عضو بنجاح
-        </div>
-        {result.errors.length > 0 && (
-          <div className="bg-danger/10 text-danger rounded-xl p-4">
-            <p className="font-medium mb-2">أخطاء ({result.errors.length}):</p>
-            {result.errors.map((e, i) => (
-              <p key={i} className="text-sm">{e.name}: {e.error}</p>
-            ))}
-          </div>
-        )}
+  if (preview) return (
+    <div className="p-6">
+      <p className="text-sm text-text-secondary mb-4">{preview.message}</p>
+      <div className="overflow-x-auto mb-4">
+        <table className="w-full text-sm">
+          <thead><tr className="bg-surface">{preview.columns.map(c => <th key={c} className="px-3 py-2 text-start font-medium text-text-secondary">{c}</th>)}</tr></thead>
+          <tbody>{preview.data.slice(0, 5).map((row, i) => <tr key={i} className="border-b border-gray-50">{preview.columns.map(c => <td key={c} className="px-3 py-2">{row[c] ?? ''}</td>)}</tr>)}</tbody>
+        </table>
       </div>
-    );
-  }
-
-  if (preview) {
-    return (
-      <div className="p-6">
-        <p className="text-sm text-text-secondary mb-4">{preview.message}</p>
-        <div className="overflow-x-auto mb-4">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-surface">
-                {preview.columns.map(col => (
-                  <th key={col} className="px-3 py-2 text-start font-medium text-text-secondary">{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {preview.data.slice(0, 5).map((row, i) => (
-                <tr key={i} className="border-b border-gray-50">
-                  {preview.columns.map(col => (
-                    <td key={col} className="px-3 py-2 text-text">{row[col] ?? ''}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {preview.data.length > 5 && (
-            <p className="text-xs text-text-secondary mt-2">و {preview.data.length - 5} سجلات أخرى...</p>
-          )}
-        </div>
-        <div className="flex gap-3">
-          <button onClick={handleImport} disabled={importing} className="flex-1 py-3 bg-success text-white rounded-xl font-medium text-sm hover:opacity-90 transition-colors cursor-pointer border-none disabled:opacity-50">
-            {importing ? 'جاري الاستيراد...' : `استيراد ${preview.data.length} سجل`}
-          </button>
-          <button onClick={() => setPreview(null)} className="px-6 py-3 bg-surface text-text rounded-xl font-medium text-sm cursor-pointer border-none">إلغاء</button>
-        </div>
+      <div className="flex gap-3">
+        <button onClick={handleImport} disabled={importing} className="flex-1 py-3 bg-success text-white rounded-xl font-medium text-sm cursor-pointer border-none disabled:opacity-50">{importing ? 'جاري...' : `استيراد ${preview.data.length} سجل`}</button>
+        <button onClick={() => setPreview(null)} className="px-6 py-3 bg-surface text-text rounded-xl font-medium text-sm cursor-pointer border-none">إلغاء</button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className="p-6">
-      <div
-        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-2xl p-12 text-center transition-colors ${
-          dragOver ? 'border-primary bg-primary/5' : 'border-gray-200'
-        }`}
-      >
-        {uploading ? (
-          <LoadingSpinner />
-        ) : (
+      <div onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+        className={`border-2 border-dashed rounded-2xl p-12 text-center transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-gray-200'}`}>
+        {uploading ? <LoadingSpinner /> : (
           <>
-            <svg className="mx-auto mb-4 text-text-secondary" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
             <p className="text-text font-medium mb-2">اسحب ملف Excel هنا</p>
-            <p className="text-text-secondary text-sm mb-4">أو</p>
-            <label className="px-6 py-3 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary-dark transition-colors cursor-pointer">
+            <label className="px-6 py-3 bg-primary text-white rounded-xl font-medium text-sm cursor-pointer">
               اختر ملف
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFile(file);
-                }}
-              />
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
             </label>
           </>
         )}
@@ -299,56 +283,40 @@ function ExcelImport({ onDone }: { onDone: () => void }) {
 export default function AdminDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'members' | 'excel'>('members');
+  const [tab, setTab] = useState<'members' | 'users' | 'excel'>('members');
   const [showForm, setShowForm] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | undefined>();
   const [search, setSearch] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [marriageMemberId, setMarriageMemberId] = useState<number | null>(null);
 
   const loadMembers = useCallback(async () => {
-    try {
-      const data = await getMembers();
-      setMembers(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    try { setMembers(await getMembers()); } catch { } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    loadMembers();
-  }, [loadMembers]);
+  useEffect(() => { loadMembers(); }, [loadMembers]);
 
   const handleSave = async (data: Partial<Member>) => {
     try {
-      if (editingMember) {
-        await updateMember(editingMember.id, data);
-      } else {
-        await createMember(data);
-      }
-      setShowForm(false);
-      setEditingMember(undefined);
-      loadMembers();
-    } catch {
-      alert('حدث خطأ');
-    }
+      if (editingMember) await updateMember(editingMember.id, data);
+      else await createMember(data);
+      setShowForm(false); setEditingMember(undefined); loadMembers();
+    } catch { alert('حدث خطأ'); }
   };
 
   const handleDelete = async (id: number) => {
-    try {
-      await deleteMember(id);
-      setDeleteConfirm(null);
-      loadMembers();
-    } catch {
-      alert('حدث خطأ');
-    }
+    try { await deleteMember(id); setDeleteConfirm(null); loadMembers(); } catch { alert('حدث خطأ'); }
+  };
+
+  const handleDeleteMarriage = async (id: number) => {
+    try { await deleteMarriage(id); loadMembers(); } catch { }
   };
 
   const filtered = members.filter(m => m.name.includes(search));
 
   const tabs = [
     { key: 'members' as const, label: 'إدارة الأعضاء' },
+    { key: 'users' as const, label: 'إدارة المستخدمين' },
     { key: 'excel' as const, label: 'استيراد Excel' },
   ];
 
@@ -358,21 +326,13 @@ export default function AdminDashboard() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <h1 className="text-2xl font-bold text-text">لوحة التحكم</h1>
-        <div className="text-sm text-text-secondary">
-          إجمالي الأعضاء: {members.length}
-        </div>
+        <div className="text-sm text-text-secondary">إجمالي الأعضاء: {members.length}</div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 bg-surface p-1 rounded-xl mb-6 w-fit">
         {tabs.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer border-none ${
-              tab === t.key ? 'bg-white text-text shadow-sm' : 'text-text-secondary hover:text-text bg-transparent'
-            }`}
-          >
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer border-none ${tab === t.key ? 'bg-white text-text shadow-sm' : 'text-text-secondary bg-transparent'}`}>
             {t.label}
           </button>
         ))}
@@ -380,97 +340,70 @@ export default function AdminDashboard() {
 
       {tab === 'members' && (
         <>
-          {/* Actions Bar */}
           <div className="flex items-center gap-3 mb-4 flex-wrap">
             <div className="flex-1 min-w-[200px]">
-              <input
-                type="text"
-                placeholder="بحث عن عضو..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full px-4 py-2.5 bg-white rounded-xl border border-gray-200 text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+              <input type="text" placeholder="بحث عن عضو..." value={search} onChange={e => setSearch(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white rounded-xl border border-gray-200 text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
-            <button
-              onClick={() => { setEditingMember(undefined); setShowForm(true); }}
-              className="px-5 py-2.5 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary-dark transition-colors cursor-pointer border-none flex items-center gap-2"
-            >
-              <span className="text-lg leading-none">+</span>
-              إضافة عضو
+            <button onClick={() => { setEditingMember(undefined); setShowForm(true); }}
+              className="px-5 py-2.5 bg-primary text-white rounded-xl font-medium text-sm cursor-pointer border-none flex items-center gap-2">
+              <span className="text-lg leading-none">+</span> إضافة عضو
             </button>
           </div>
 
-          {/* Members Table */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-surface/50 border-b border-gray-100">
-                    <th className="px-4 py-3 text-start font-medium text-text-secondary">#</th>
                     <th className="px-4 py-3 text-start font-medium text-text-secondary">الاسم</th>
-                    <th className="px-4 py-3 text-start font-medium text-text-secondary hidden sm:table-cell">الجنس</th>
-                    <th className="px-4 py-3 text-start font-medium text-text-secondary hidden md:table-cell">الجيل</th>
-                    <th className="px-4 py-3 text-start font-medium text-text-secondary hidden lg:table-cell">الميلاد</th>
-                    <th className="px-4 py-3 text-start font-medium text-text-secondary hidden lg:table-cell">الوفاة</th>
+                    <th className="px-4 py-3 text-start font-medium text-text-secondary hidden sm:table-cell">الجيل</th>
+                    <th className="px-4 py-3 text-start font-medium text-text-secondary hidden md:table-cell">المدينة</th>
+                    <th className="px-4 py-3 text-start font-medium text-text-secondary hidden lg:table-cell">الزوجات</th>
                     <th className="px-4 py-3 text-start font-medium text-text-secondary">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map(m => (
                     <tr key={m.id} className="border-b border-gray-50 hover:bg-surface/30 transition-colors">
-                      <td className="px-4 py-3 text-text-secondary">{m.id}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${m.gender === 'female' ? 'bg-pink-500' : 'bg-primary'}`} />
                           <span className="font-medium text-text">{m.name}</span>
+                          {m.death_date && <span className="text-xs">🕊️</span>}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-text-secondary hidden sm:table-cell">{m.gender === 'male' ? 'ذكر' : 'أنثى'}</td>
-                      <td className="px-4 py-3 text-text-secondary hidden md:table-cell">{m.generation}</td>
-                      <td className="px-4 py-3 text-text-secondary hidden lg:table-cell">{m.birth_date || '—'}</td>
-                      <td className="px-4 py-3 text-text-secondary hidden lg:table-cell">{m.death_date || '—'}</td>
+                      <td className="px-4 py-3 text-text-secondary hidden sm:table-cell">{m.generation}</td>
+                      <td className="px-4 py-3 text-text-secondary hidden md:table-cell">{m.city || '—'}</td>
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          {m.marriages?.map((mr, i) => (
+                            <span key={i} className={`px-1.5 py-0.5 rounded text-xs ${mr.status === 'divorced' ? 'bg-gray-100 text-gray-400' : mr.status === 'deceased' ? 'bg-gray-100 text-gray-500' : 'bg-pink-50 text-pink-600'}`}>
+                              {mr.wife_name}
+                              <button onClick={() => handleDeleteMarriage(mr.id)} className="ms-1 text-gray-400 hover:text-danger cursor-pointer bg-transparent border-none text-xs">×</button>
+                            </span>
+                          ))}
+                          <button onClick={() => setMarriageMemberId(marriageMemberId === m.id ? null : m.id)}
+                            className="px-1.5 py-0.5 rounded text-xs bg-pink-50 text-pink-400 cursor-pointer border-none">+</button>
+                        </div>
+                        {marriageMemberId === m.id && <div className="mt-2"><MarriageForm memberId={m.id} onDone={() => { setMarriageMemberId(null); loadMembers(); }} /></div>}
+                      </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => { setEditingMember(m); setShowForm(true); }}
-                            className="px-3 py-1.5 text-primary bg-primary/10 rounded-lg text-xs font-medium hover:bg-primary/20 transition-colors cursor-pointer border-none"
-                          >
-                            تعديل
-                          </button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => { setEditingMember(m); setShowForm(true); }}
+                            className="px-2 py-1 text-primary bg-primary/10 rounded-lg text-xs font-medium cursor-pointer border-none">تعديل</button>
                           {deleteConfirm === m.id ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => handleDelete(m.id)}
-                                className="px-3 py-1.5 text-white bg-danger rounded-lg text-xs font-medium cursor-pointer border-none"
-                              >
-                                تأكيد
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirm(null)}
-                                className="px-3 py-1.5 text-text-secondary bg-surface rounded-lg text-xs font-medium cursor-pointer border-none"
-                              >
-                                إلغاء
-                              </button>
-                            </div>
+                            <>
+                              <button onClick={() => handleDelete(m.id)} className="px-2 py-1 text-white bg-danger rounded-lg text-xs cursor-pointer border-none">تأكيد</button>
+                              <button onClick={() => setDeleteConfirm(null)} className="px-2 py-1 bg-surface rounded-lg text-xs cursor-pointer border-none">إلغاء</button>
+                            </>
                           ) : (
-                            <button
-                              onClick={() => setDeleteConfirm(m.id)}
-                              className="px-3 py-1.5 text-danger bg-danger/10 rounded-lg text-xs font-medium hover:bg-danger/20 transition-colors cursor-pointer border-none"
-                            >
-                              حذف
-                            </button>
+                            <button onClick={() => setDeleteConfirm(m.id)} className="px-2 py-1 text-danger bg-danger/10 rounded-lg text-xs cursor-pointer border-none">حذف</button>
                           )}
                         </div>
                       </td>
                     </tr>
                   ))}
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-text-secondary">
-                        لا توجد نتائج
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
@@ -478,31 +411,20 @@ export default function AdminDashboard() {
         </>
       )}
 
+      {tab === 'users' && <UsersTab members={members} />}
+
       {tab === 'excel' && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
             <h3 className="text-lg font-bold text-text">استيراد من ملف Excel</h3>
-            <p className="text-sm text-text-secondary mt-1">
-              ارفع ملف Excel يحتوي على أعمدة: الاسم، اسم الأب، الجنس، تاريخ الميلاد، تاريخ الوفاة
-            </p>
           </div>
           <ExcelImport onDone={loadMembers} />
         </div>
       )}
 
-      {/* Member Form Modal */}
-      <Modal
-        isOpen={showForm}
-        onClose={() => { setShowForm(false); setEditingMember(undefined); }}
-        title={editingMember ? `تعديل: ${editingMember.name}` : 'إضافة عضو جديد'}
-        size="lg"
-      >
-        <MemberForm
-          member={editingMember}
-          allMembers={members}
-          onSave={handleSave}
-          onCancel={() => { setShowForm(false); setEditingMember(undefined); }}
-        />
+      <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditingMember(undefined); }}
+        title={editingMember ? `تعديل: ${editingMember.name}` : 'إضافة عضو جديد'} size="lg">
+        <MemberForm member={editingMember} allMembers={members} onSave={handleSave} onCancel={() => { setShowForm(false); setEditingMember(undefined); }} />
       </Modal>
     </div>
   );

@@ -1,15 +1,11 @@
 import axios from 'axios';
-import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse } from '../types';
+import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage } from '../types';
 
-const api = axios.create({
-  baseURL: '/api',
-});
+const api = axios.create({ baseURL: '/api' });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -17,8 +13,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 403) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      // Don't clear on 403 for pending users
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
     return Promise.reject(error);
   }
@@ -27,6 +26,18 @@ api.interceptors.response.use(
 // Auth
 export const login = (username: string, password: string) =>
   api.post<AuthResponse>('/auth/login', { username, password }).then(r => r.data);
+
+export const register = (username: string, password: string, full_name: string) =>
+  api.post('/auth/register', { username, password, full_name }).then(r => r.data);
+
+export const getUsers = () =>
+  api.get<User[]>('/auth/users').then(r => r.data);
+
+export const updateUserStatus = (id: number, data: { status?: string; role?: string; member_id?: number | null }) =>
+  api.put<User>(`/auth/users/${id}/status`, data).then(r => r.data);
+
+export const deleteUser = (id: number) =>
+  api.delete(`/auth/users/${id}`).then(r => r.data);
 
 // Members
 export const getMembers = () =>
@@ -49,6 +60,16 @@ export const updateMember = (id: number, data: Partial<Member>) =>
 
 export const deleteMember = (id: number) =>
   api.delete(`/members/${id}`).then(r => r.data);
+
+// Marriages
+export const addMarriage = (memberId: number, data: Partial<Marriage>) =>
+  api.post<Marriage>(`/members/${memberId}/marriages`, data).then(r => r.data);
+
+export const updateMarriage = (id: number, data: Partial<Marriage>) =>
+  api.put<Marriage>(`/members/marriages/${id}`, data).then(r => r.data);
+
+export const deleteMarriage = (id: number) =>
+  api.delete(`/members/marriages/${id}`).then(r => r.data);
 
 // Stats
 export const getStats = () =>

@@ -7,14 +7,12 @@ interface AuthContextType {
   setAuth: (token: string, user: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
-  user: null,
-  token: null,
-  setAuth: () => {},
-  logout: () => {},
-  isAuthenticated: false,
+  user: null, token: null, setAuth: () => {}, logout: () => {},
+  isAuthenticated: false, isAdmin: false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -46,7 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, setAuth, logout, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{
+      user, token, setAuth, logout,
+      isAuthenticated: !!token,
+      isAdmin: user?.role === 'admin',
+    }}>
       {children}
     </AuthContext.Provider>
   );

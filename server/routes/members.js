@@ -4,6 +4,17 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Attach marriages to members
+function attachMarriages(members) {
+  const allMarriages = db.prepare('SELECT * FROM marriages ORDER BY marriage_order').all();
+  const marriageMap = new Map();
+  for (const m of allMarriages) {
+    if (!marriageMap.has(m.husband_id)) marriageMap.set(m.husband_id, []);
+    marriageMap.get(m.husband_id).push(m);
+  }
+  return members.map(m => ({ ...m, marriages: marriageMap.get(m.id) || [] }));
+}
+
 // Build tree structure from flat list
 function buildTree(members, parentId = null) {
   return members
@@ -17,11 +28,13 @@ function buildTree(members, parentId = null) {
 // Get all members (flat or tree)
 router.get('/', (req, res) => {
   const members = db.prepare('SELECT * FROM members ORDER BY generation, name').all();
+  const withMarriages = attachMarriages(members);
+
   if (req.query.format === 'tree') {
-    const tree = buildTree(members);
+    const tree = buildTree(withMarriages);
     return res.json(tree);
   }
-  res.json(members);
+  res.json(withMarriages);
 });
 
 // Get single member
@@ -30,7 +43,8 @@ router.get('/:id', (req, res) => {
   if (!member) {
     return res.status(404).json({ error: 'العضو غير موجود' });
   }
-  res.json(member);
+  const marriages = db.prepare('SELECT * FROM marriages WHERE husband_id = ? OR wife_id = ? ORDER BY marriage_order').all(member.id, member.id);
+  res.json({ ...member, marriages });
 });
 
 // Get member's subtree (descendants)
@@ -40,7 +54,7 @@ router.get('/:id/subtree', (req, res) => {
     return res.status(404).json({ error: 'العضو غير موجود' });
   }
 
-  const allMembers = db.prepare('SELECT * FROM members').all();
+  const allMembers = attachMarriages(db.prepare('SELECT * FROM members').all());
 
   function getDescendants(parentId) {
     return allMembers
@@ -51,7 +65,6 @@ router.get('/:id/subtree', (req, res) => {
       }));
   }
 
-  // Get ancestors path
   function getAncestors(memberId) {
     const ancestors = [];
     let current = allMembers.find(m => m.id === memberId);
@@ -60,18 +73,18 @@ router.get('/:id/subtree', (req, res) => {
       if (parent) {
         ancestors.unshift(parent);
         current = parent;
-      } else {
-        break;
-      }
+      } else break;
     }
     return ancestors;
   }
 
+  const memberWithMarriages = allMembers.find(m => m.id === member.id) || member;
+
   res.json({
-    member,
+    member: memberWithMarriages,
     ancestors: getAncestors(member.id),
     tree: {
-      ...member,
+      ...memberWithMarriages,
       children: getDescendants(member.id)
     }
   });
@@ -79,13 +92,12 @@ router.get('/:id/subtree', (req, res) => {
 
 // Create member (admin only)
 router.post('/', authenticateToken, (req, res) => {
-  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, spouse_name, generation } = req.body;
+  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, generation } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'الاسم مطلوب' });
   }
 
-  // Calculate generation
   let gen = generation || 1;
   if (father_id && !generation) {
     const father = db.prepare('SELECT generation FROM members WHERE id = ?').get(father_id);
@@ -93,17 +105,26 @@ router.post('/', authenticateToken, (req, res) => {
   }
 
   const result = db.prepare(`
-    INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, mother_name, spouse_name, generation)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, mother_name || null, spouse_name || null, gen);
+    INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, generation)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, mother_name || null, city || null, nationality || null, occupation || null, gen);
 
   const newMember = db.prepare('SELECT * FROM members WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(newMember);
 });
 
-// Update member (admin only)
+// Update member (admin or own member)
 router.put('/:id', authenticateToken, (req, res) => {
-  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, spouse_name, generation } = req.body;
+  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, generation } = req.body;
+
+  // Allow admin or member editing their own subtree
+  if (req.user.role !== 'admin' && req.user.member_id) {
+    // Check if target member is in user's subtree
+    const canEdit = isInSubtree(req.user.member_id, parseInt(req.params.id));
+    if (!canEdit) return res.status(403).json({ error: 'غير مصرح بتعديل هذا العضو' });
+  } else if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'غير مصرح' });
+  }
 
   const existing = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);
   if (!existing) {
@@ -112,7 +133,7 @@ router.put('/:id', authenticateToken, (req, res) => {
 
   db.prepare(`
     UPDATE members SET name = ?, father_id = ?, gender = ?, birth_date = ?, death_date = ?,
-    bio = ?, phone = ?, mother_name = ?, spouse_name = ?, generation = ?, updated_at = CURRENT_TIMESTAMP
+    bio = ?, phone = ?, mother_name = ?, city = ?, nationality = ?, occupation = ?, generation = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
     name || existing.name,
@@ -123,7 +144,9 @@ router.put('/:id', authenticateToken, (req, res) => {
     bio !== undefined ? bio : existing.bio,
     phone !== undefined ? phone : existing.phone,
     mother_name !== undefined ? mother_name : existing.mother_name,
-    spouse_name !== undefined ? spouse_name : existing.spouse_name,
+    city !== undefined ? city : existing.city,
+    nationality !== undefined ? nationality : existing.nationality,
+    occupation !== undefined ? occupation : existing.occupation,
     generation || existing.generation,
     req.params.id
   );
@@ -134,16 +157,62 @@ router.put('/:id', authenticateToken, (req, res) => {
 
 // Delete member (admin only)
 router.delete('/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+
   const existing = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'العضو غير موجود' });
   }
 
-  // Update children to have no father
   db.prepare('UPDATE members SET father_id = NULL WHERE father_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM marriages WHERE husband_id = ? OR wife_id = ?').run(req.params.id, req.params.id);
   db.prepare('DELETE FROM members WHERE id = ?').run(req.params.id);
 
   res.json({ message: 'تم حذف العضو بنجاح' });
 });
+
+// Marriages CRUD
+router.post('/:id/marriages', authenticateToken, (req, res) => {
+  const { wife_name, wife_id, status, marriage_order } = req.body;
+
+  const order = marriage_order || (db.prepare('SELECT MAX(marriage_order) as max FROM marriages WHERE husband_id = ?').get(req.params.id)?.max || 0) + 1;
+
+  const result = db.prepare(
+    'INSERT INTO marriages (husband_id, wife_id, wife_name, status, marriage_order) VALUES (?, ?, ?, ?, ?)'
+  ).run(req.params.id, wife_id || null, wife_name || null, status || 'married', order);
+
+  const marriage = db.prepare('SELECT * FROM marriages WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json(marriage);
+});
+
+router.put('/marriages/:id', authenticateToken, (req, res) => {
+  const { wife_name, wife_id, status } = req.body;
+  const existing = db.prepare('SELECT * FROM marriages WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'غير موجود' });
+
+  db.prepare('UPDATE marriages SET wife_name = ?, wife_id = ?, status = ? WHERE id = ?').run(
+    wife_name !== undefined ? wife_name : existing.wife_name,
+    wife_id !== undefined ? wife_id : existing.wife_id,
+    status || existing.status,
+    req.params.id
+  );
+  res.json(db.prepare('SELECT * FROM marriages WHERE id = ?').get(req.params.id));
+});
+
+router.delete('/marriages/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+  db.prepare('DELETE FROM marriages WHERE id = ?').run(req.params.id);
+  res.json({ message: 'تم الحذف' });
+});
+
+// Helper: check if targetId is in subtree of rootId
+function isInSubtree(rootId, targetId) {
+  if (rootId === targetId) return true;
+  const children = db.prepare('SELECT id FROM members WHERE father_id = ?').all(rootId);
+  for (const child of children) {
+    if (isInSubtree(child.id, targetId)) return true;
+  }
+  return false;
+}
 
 module.exports = router;

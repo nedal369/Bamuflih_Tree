@@ -7,15 +7,25 @@ router.get('/', (req, res) => {
   const totalMembers = db.prepare('SELECT COUNT(*) as count FROM members').get().count;
   const maleCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE gender = 'male'").get().count;
   const femaleCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE gender = 'female'").get().count;
-  const livingCount = db.prepare('SELECT COUNT(*) as count FROM members WHERE death_date IS NULL').get().count;
-  const deceasedCount = db.prepare('SELECT COUNT(*) as count FROM members WHERE death_date IS NOT NULL').get().count;
+  const livingCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE death_date IS NULL OR death_date = ''").get().count;
+  const deceasedCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE death_date IS NOT NULL AND death_date != ''").get().count;
   const maxGeneration = db.prepare('SELECT MAX(generation) as max FROM members').get().max || 0;
 
   const generationDistribution = db.prepare(
     'SELECT generation, COUNT(*) as count FROM members GROUP BY generation ORDER BY generation'
   ).all();
 
-  // Largest branches (by root member's children count)
+  // City distribution
+  const cityDistribution = db.prepare(
+    "SELECT city, COUNT(*) as count FROM members WHERE city IS NOT NULL AND city != '' GROUP BY city ORDER BY count DESC"
+  ).all();
+
+  // Marriage status distribution
+  const marriageStats = db.prepare(
+    'SELECT status, COUNT(*) as count FROM marriages GROUP BY status ORDER BY count DESC'
+  ).all();
+
+  // Largest branches
   const branches = db.prepare(`
     SELECT m.id, m.name, COUNT(c.id) as descendants_count
     FROM members m
@@ -25,7 +35,6 @@ router.get('/', (req, res) => {
     ORDER BY descendants_count DESC
   `).all();
 
-  // Get total descendants for each branch
   const allMembers = db.prepare('SELECT id, father_id, name FROM members').all();
   function countDescendants(parentId) {
     const children = allMembers.filter(m => m.father_id === parentId);
@@ -49,6 +58,8 @@ router.get('/', (req, res) => {
     deceasedCount,
     maxGeneration,
     generationDistribution,
+    cityDistribution,
+    marriageStats,
     branches: branchStats
   });
 });
