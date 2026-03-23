@@ -71,8 +71,8 @@ if (!existingUser) {
   db.prepare('UPDATE users SET role = ?, status = ? WHERE username = ?').run('admin', 'approved', 'admin');
 }
 
-// Find Excel file
-const files = ['شجرة_عائلة_بامفلح_كاملة_1.xlsx', 'شجرة_عائلة_بامفلح_ثلاثي.xlsx'];
+// Find Excel file (prefer newest)
+const files = ['Full tree.xlsx', 'شجرة_عائلة_بامفلح_كاملة_1.xlsx', 'شجرة_عائلة_بامفلح_ثلاثي.xlsx'];
 let xlsxPath;
 for (const f of files) {
   const p = path.join(__dirname, '..', '..', f);
@@ -109,9 +109,10 @@ function parseBio(bio) {
   return { occupation, city, nationality, cleanBio: bio };
 }
 
-// Map rows
+// Map rows - support both old and new column formats
 const mapped = rows.map(row => {
-  const bio = row['ملاحظات'] || null;
+  // New format has separate columns; old format has combined 'ملاحظات'
+  const bio = row['ملاحظات'] || row['الحالة'] || null;
   const parsed = parseBio(bio);
   const phone = row['الهاتف'] ? String(Math.round(row['الهاتف'])) : null;
 
@@ -123,9 +124,9 @@ const mapped = rows.map(row => {
     gender: row['الجنس'] === 'أنثى' ? 'female' : 'male',
     birth_date: row['تاريخ الميلاد'] || null,
     death_date: row['تاريخ الوفاة'] === 'متوفى' || row['تاريخ الوفاة'] === 'متوفي' ? 'متوفى' : (row['تاريخ الوفاة'] || null),
-    bio: parsed.cleanBio,
+    bio: row['الحالة'] || parsed.cleanBio,
     phone,
-    city: row['المدينة'] || parsed.city || null,
+    city: row['مكان الإقامة'] || row['المدينة'] || parsed.city || null,
     nationality: row['الجنسية'] || parsed.nationality || null,
     occupation: row['العمل'] || parsed.occupation || null,
     generation: row['الجيل'] || 1,
