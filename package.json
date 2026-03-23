@@ -2,12 +2,16 @@
   "name": "bamuflih-family-tree",
   "version": "1.0.0",
   "description": "موقع شجرة عائلة آل بامفلح",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
     "client": "cd client && npm run dev",
     "seed": "node server/db/seed.js",
-    "build": "cd client && npm run build",
+    "build": "cd client && npm install && npm run build",
+    "postbuild": "node server/db/seed.js",
     "start": "NODE_ENV=production node server/index.js"
   },
   "dependencies": {
