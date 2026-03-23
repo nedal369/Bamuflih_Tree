@@ -117,13 +117,25 @@ router.post('/', authenticateToken, (req, res) => {
 router.put('/:id', authenticateToken, (req, res) => {
   const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation } = req.body;
 
-  // Allow admin or member editing their own subtree
-  if (req.user.role !== 'admin' && req.user.member_id) {
-    // Check if target member is in user's subtree
-    const canEdit = isInSubtree(req.user.member_id, parseInt(req.params.id));
-    if (!canEdit) return res.status(403).json({ error: 'غير مصرح بتعديل هذا العضو' });
-  } else if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'غير مصرح' });
+  // Permission check
+  if (req.user.role !== 'admin') {
+    const user = db.prepare('SELECT permission_type, allowed_subtrees, member_id FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(403).json({ error: 'غير مصرح' });
+
+    const targetId = parseInt(req.params.id);
+
+    if (user.permission_type === 'full_tree') {
+      // Can edit any member
+    } else if (user.permission_type === 'custom_subtrees') {
+      // Can edit members in specific subtrees
+      const subtrees = user.allowed_subtrees ? JSON.parse(user.allowed_subtrees) : [];
+      const canEdit = subtrees.some(rootId => isInSubtree(rootId, targetId));
+      if (!canEdit) return res.status(403).json({ error: 'غير مصرح بتعديل هذا العضو' });
+    } else {
+      // own_subtree: can only edit own subtree
+      if (!user.member_id) return res.status(403).json({ error: 'غير مصرح' });
+      if (!isInSubtree(user.member_id, targetId)) return res.status(403).json({ error: 'غير مصرح بتعديل هذا العضو' });
+    }
   }
 
   const existing = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);

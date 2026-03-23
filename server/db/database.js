@@ -46,6 +46,8 @@ db.exec(`
     role TEXT CHECK(role IN ('admin', 'member', 'pending')) DEFAULT 'pending',
     member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
     status TEXT CHECK(status IN ('approved', 'pending', 'rejected')) DEFAULT 'pending',
+    permission_type TEXT DEFAULT 'own_subtree',
+    allowed_subtrees TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -74,6 +76,8 @@ const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
 if (!userCols.includes('full_name')) db.exec('ALTER TABLE users ADD COLUMN full_name TEXT');
 if (!userCols.includes('member_id')) db.exec('ALTER TABLE users ADD COLUMN member_id INTEGER REFERENCES members(id) ON DELETE SET NULL');
 if (!userCols.includes('status')) db.exec('ALTER TABLE users ADD COLUMN status TEXT DEFAULT \'pending\'');
+if (!userCols.includes('permission_type')) db.exec("ALTER TABLE users ADD COLUMN permission_type TEXT DEFAULT 'own_subtree'");
+if (!userCols.includes('allowed_subtrees')) db.exec('ALTER TABLE users ADD COLUMN allowed_subtrees TEXT');
 
 // Create marriages table index
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_husband ON marriages(husband_id)');

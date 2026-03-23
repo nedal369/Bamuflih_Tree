@@ -48,7 +48,12 @@ router.post('/login', (req, res) => {
 
   res.json({
     token,
-    user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role, member_id: user.member_id, status: user.status }
+    user: {
+      id: user.id, username: user.username, full_name: user.full_name, role: user.role,
+      member_id: user.member_id, status: user.status,
+      permission_type: user.permission_type || 'own_subtree',
+      allowed_subtrees: user.allowed_subtrees ? JSON.parse(user.allowed_subtrees) : []
+    }
   });
 });
 
@@ -83,27 +88,69 @@ router.get('/me', authenticateToken, (req, res) => {
 // Admin: list all users
 router.get('/users', authenticateToken, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-  const users = db.prepare('SELECT id, username, full_name, role, member_id, status, created_at FROM users ORDER BY created_at DESC').all();
-  res.json(users);
+  const users = db.prepare('SELECT id, username, full_name, role, member_id, status, permission_type, allowed_subtrees, created_at FROM users ORDER BY created_at DESC').all();
+  // Parse allowed_subtrees JSON
+  res.json(users.map(u => ({
+    ...u,
+    allowed_subtrees: u.allowed_subtrees ? JSON.parse(u.allowed_subtrees) : []
+  })));
 });
 
-// Admin: approve/reject user
+// Admin: create user directly
+router.post('/users', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+
+  const { username, password, full_name, role, member_id, permission_type, allowed_subtrees } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
+  }
+
+  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (existing) {
+    return res.status(409).json({ error: 'اسم المستخدم مستخدم بالفعل' });
+  }
+
+  const hash = bcrypt.hashSync(password, 10);
+  const subtreesJson = allowed_subtrees && Array.isArray(allowed_subtrees) ? JSON.stringify(allowed_subtrees) : null;
+
+  db.prepare(
+    'INSERT INTO users (username, password_hash, full_name, role, status, member_id, permission_type, allowed_subtrees) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(username, hash, full_name || null, role || 'member', 'approved', member_id || null, permission_type || 'own_subtree', subtreesJson);
+
+  const newUser = db.prepare('SELECT id, username, full_name, role, member_id, status, permission_type, allowed_subtrees FROM users WHERE username = ?').get(username);
+  res.status(201).json({
+    ...newUser,
+    allowed_subtrees: newUser.allowed_subtrees ? JSON.parse(newUser.allowed_subtrees) : []
+  });
+});
+
+// Admin: approve/reject/update user
 router.put('/users/:id/status', authenticateToken, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
 
-  const { status, role, member_id } = req.body;
+  const { status, role, member_id, permission_type, allowed_subtrees } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
 
-  db.prepare('UPDATE users SET status = ?, role = ?, member_id = ? WHERE id = ?').run(
+  const subtreesJson = allowed_subtrees !== undefined
+    ? (Array.isArray(allowed_subtrees) ? JSON.stringify(allowed_subtrees) : null)
+    : user.allowed_subtrees;
+
+  db.prepare('UPDATE users SET status = ?, role = ?, member_id = ?, permission_type = ?, allowed_subtrees = ? WHERE id = ?').run(
     status || user.status,
     role || user.role,
     member_id !== undefined ? member_id : user.member_id,
+    permission_type || user.permission_type || 'own_subtree',
+    subtreesJson,
     req.params.id
   );
 
-  const updated = db.prepare('SELECT id, username, full_name, role, member_id, status FROM users WHERE id = ?').get(req.params.id);
-  res.json(updated);
+  const updated = db.prepare('SELECT id, username, full_name, role, member_id, status, permission_type, allowed_subtrees FROM users WHERE id = ?').get(req.params.id);
+  res.json({
+    ...updated,
+    allowed_subtrees: updated.allowed_subtrees ? JSON.parse(updated.allowed_subtrees) : []
+  });
 });
 
 // Admin: delete user

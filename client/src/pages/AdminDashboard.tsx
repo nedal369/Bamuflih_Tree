@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   getMembers, createMember, updateMember, deleteMember,
-  uploadExcel, importExcelData, downloadExcel, getUsers, updateUserStatus, deleteUser,
+  uploadExcel, importExcelData, downloadExcel, getUsers, createUser, updateUserStatus, deleteUser,
   addMarriage, deleteMarriage,
 } from '../services/api';
 import type { Member, ExcelUploadResponse, User, Marriage } from '../types';
@@ -141,10 +141,122 @@ function MarriageForm({ memberId, onDone }: { memberId: number; onDone: () => vo
   );
 }
 
+/* ─── Create User Form ─── */
+function CreateUserForm({ members, onDone }: { members: Member[]; onDone: () => void }) {
+  const [form, setForm] = useState({
+    username: '',
+    password: '',
+    full_name: '',
+    role: 'member' as 'admin' | 'member',
+    member_id: '' as string | number,
+    permission_type: 'own_subtree' as 'full_tree' | 'own_subtree' | 'custom_subtrees',
+    allowed_subtrees: [] as number[],
+  });
+  const [error, setError] = useState('');
+
+  // Get generation-2 members (branch roots) for subtree selection
+  const branchRoots = members.filter(m => m.generation === 2 && m.gender === 'male');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await createUser({
+        username: form.username,
+        password: form.password,
+        full_name: form.full_name || undefined,
+        role: form.role,
+        member_id: form.member_id ? Number(form.member_id) : null,
+        permission_type: form.role === 'admin' ? 'full_tree' : form.permission_type,
+        allowed_subtrees: form.permission_type === 'custom_subtrees' ? form.allowed_subtrees : [],
+      });
+      onDone();
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err ? (err as { response?: { data?: { error?: string } } }).response?.data?.error : 'حدث خطأ';
+      setError(msg || 'حدث خطأ');
+    }
+  };
+
+  const toggleSubtree = (id: number) => {
+    setForm(f => ({
+      ...f,
+      allowed_subtrees: f.allowed_subtrees.includes(id)
+        ? f.allowed_subtrees.filter(s => s !== id)
+        : [...f.allowed_subtrees, id]
+    }));
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="p-6 space-y-4">
+      {error && <div className="bg-danger/10 text-danger rounded-xl p-3 text-sm">{error}</div>}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">اسم المستخدم *</label>
+          <input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">كلمة المرور *</label>
+          <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">الاسم الكامل</label>
+          <input value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">الدور</label>
+          <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value as 'admin' | 'member' })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
+            <option value="member">عضو</option>
+            <option value="admin">مدير</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-text mb-1">ربط بعضو في الشجرة</label>
+        <select value={form.member_id} onChange={e => setForm({ ...form, member_id: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
+          <option value="">غير مرتبط</option>
+          {members.map(m => <option key={m.id} value={m.id}>{m.name} (الجيل {m.generation})</option>)}
+        </select>
+      </div>
+      {form.role !== 'admin' && (
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">صلاحيات التعديل</label>
+          <select value={form.permission_type} onChange={e => setForm({ ...form, permission_type: e.target.value as typeof form.permission_type })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
+            <option value="own_subtree">شجرته الفرعية فقط (حسب العضو المرتبط)</option>
+            <option value="full_tree">جميع الشجرة</option>
+            <option value="custom_subtrees">شجرات فرعية مخصصة</option>
+          </select>
+        </div>
+      )}
+      {form.role !== 'admin' && form.permission_type === 'custom_subtrees' && (
+        <div>
+          <label className="block text-sm font-medium text-text mb-2">اختر الشجرات الفرعية المسموحة</label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 bg-surface rounded-xl">
+            {branchRoots.map(m => (
+              <label key={m.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${form.allowed_subtrees.includes(m.id) ? 'bg-primary/10 text-primary' : 'bg-white text-text'}`}>
+                <input type="checkbox" checked={form.allowed_subtrees.includes(m.id)} onChange={() => toggleSubtree(m.id)} className="accent-primary" />
+                {m.name}
+              </label>
+            ))}
+            {branchRoots.length === 0 && <p className="text-xs text-text-secondary col-span-full">لا توجد فروع متاحة</p>}
+          </div>
+        </div>
+      )}
+      <div className="flex gap-3 pt-2">
+        <button type="submit" className="flex-1 py-3 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary-dark transition-colors cursor-pointer border-none">إنشاء المستخدم</button>
+        <button type="button" onClick={onDone} className="px-6 py-3 bg-surface text-text rounded-xl font-medium text-sm cursor-pointer border-none">إلغاء</button>
+      </div>
+    </form>
+  );
+}
+
 /* ─── Users Management ─── */
 function UsersTab({ members }: { members: Member[] }) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const loadUsers = useCallback(async () => {
     try { setUsers(await getUsers()); } catch { } finally { setLoading(false); }
@@ -167,67 +279,135 @@ function UsersTab({ members }: { members: Member[] }) {
     loadUsers();
   };
 
+  const handleUpdatePermission = async (userId: number, permType: string, subtrees?: number[]) => {
+    await updateUserStatus(userId, { permission_type: permType, allowed_subtrees: subtrees });
+    loadUsers();
+  };
+
   const statusColors: Record<string, string> = {
     pending: 'bg-warning/10 text-warning',
     approved: 'bg-success/10 text-success',
     rejected: 'bg-danger/10 text-danger',
   };
   const statusLabels: Record<string, string> = { pending: 'بانتظار', approved: 'مقبول', rejected: 'مرفوض' };
+  const permLabels: Record<string, string> = { full_tree: 'جميع الشجرة', own_subtree: 'شجرته فقط', custom_subtrees: 'شجرات مخصصة' };
+
+  // Branch roots for subtree selection
+  const branchRoots = members.filter(m => m.generation === 2 && m.gender === 'male');
+  const memberIdToName = new Map(members.map(m => [m.id, m.name]));
 
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-surface/50 border-b border-gray-100">
-              <th className="px-4 py-3 text-start font-medium text-text-secondary">المستخدم</th>
-              <th className="px-4 py-3 text-start font-medium text-text-secondary">الاسم</th>
-              <th className="px-4 py-3 text-start font-medium text-text-secondary">الحالة</th>
-              <th className="px-4 py-3 text-start font-medium text-text-secondary">العضو المرتبط</th>
-              <th className="px-4 py-3 text-start font-medium text-text-secondary">إجراءات</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.id} className="border-b border-gray-50">
-                <td className="px-4 py-3 font-medium">{u.username}</td>
-                <td className="px-4 py-3 text-text-secondary">{u.full_name || '—'}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded-lg text-xs font-medium ${statusColors[u.status] || ''}`}>
-                    {statusLabels[u.status] || u.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  {u.role === 'admin' ? <span className="text-primary font-medium text-xs">مدير</span> : (
-                    <select
-                      value={u.member_id || ''}
-                      onChange={e => handleApprove(u.id, e.target.value ? Number(e.target.value) : undefined)}
-                      className="px-2 py-1 bg-surface rounded-lg border-none text-xs"
-                    >
-                      <option value="">غير مرتبط</option>
-                      {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {u.role !== 'admin' && (
-                    <div className="flex gap-1">
-                      {u.status === 'pending' && (
-                        <>
-                          <button onClick={() => handleApprove(u.id)} className="px-2 py-1 bg-success/10 text-success rounded-lg text-xs font-medium cursor-pointer border-none">قبول</button>
-                          <button onClick={() => handleReject(u.id)} className="px-2 py-1 bg-danger/10 text-danger rounded-lg text-xs font-medium cursor-pointer border-none">رفض</button>
-                        </>
-                      )}
-                      <button onClick={() => handleDelete(u.id)} className="px-2 py-1 bg-gray-100 text-gray-500 rounded-lg text-xs cursor-pointer border-none">حذف</button>
-                    </div>
-                  )}
-                </td>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={() => setShowCreateForm(true)} className="px-5 py-2.5 bg-primary text-white rounded-xl font-medium text-sm cursor-pointer border-none flex items-center gap-2">
+          <span className="text-lg leading-none">+</span> إضافة مستخدم
+        </button>
+      </div>
+
+      {showCreateForm && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h3 className="text-lg font-bold text-text">إنشاء مستخدم جديد</h3>
+          </div>
+          <CreateUserForm members={members} onDone={() => { setShowCreateForm(false); loadUsers(); }} />
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-surface/50 border-b border-gray-100">
+                <th className="px-4 py-3 text-start font-medium text-text-secondary">المستخدم</th>
+                <th className="px-4 py-3 text-start font-medium text-text-secondary">الاسم</th>
+                <th className="px-4 py-3 text-start font-medium text-text-secondary">الحالة</th>
+                <th className="px-4 py-3 text-start font-medium text-text-secondary">العضو المرتبط</th>
+                <th className="px-4 py-3 text-start font-medium text-text-secondary hidden lg:table-cell">الصلاحيات</th>
+                <th className="px-4 py-3 text-start font-medium text-text-secondary">إجراءات</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} className="border-b border-gray-50">
+                  <td className="px-4 py-3 font-medium">{u.username}</td>
+                  <td className="px-4 py-3 text-text-secondary">{u.full_name || '—'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${statusColors[u.status] || ''}`}>
+                      {statusLabels[u.status] || u.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.role === 'admin' ? <span className="text-primary font-medium text-xs">مدير</span> : (
+                      <select
+                        value={u.member_id || ''}
+                        onChange={e => handleApprove(u.id, e.target.value ? Number(e.target.value) : undefined)}
+                        className="px-2 py-1 bg-surface rounded-lg border-none text-xs"
+                      >
+                        <option value="">غير مرتبط</option>
+                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    {u.role === 'admin' ? (
+                      <span className="text-xs text-primary font-medium">كامل</span>
+                    ) : (
+                      <div className="space-y-1">
+                        <select
+                          value={u.permission_type || 'own_subtree'}
+                          onChange={e => handleUpdatePermission(u.id, e.target.value, e.target.value === 'custom_subtrees' ? u.allowed_subtrees : [])}
+                          className="px-2 py-1 bg-surface rounded-lg border-none text-xs"
+                        >
+                          <option value="own_subtree">شجرته فقط</option>
+                          <option value="full_tree">جميع الشجرة</option>
+                          <option value="custom_subtrees">شجرات مخصصة</option>
+                        </select>
+                        {u.permission_type === 'custom_subtrees' && (
+                          <div>
+                            <button onClick={() => setEditingUser(editingUser?.id === u.id ? null : u)} className="text-xs text-primary cursor-pointer bg-transparent border-none underline">
+                              {u.allowed_subtrees?.length ? `${u.allowed_subtrees.length} شجرات` : 'اختر'} &#9998;
+                            </button>
+                            {editingUser?.id === u.id && (
+                              <div className="mt-1 p-2 bg-surface rounded-lg max-h-32 overflow-y-auto">
+                                {branchRoots.map(m => (
+                                  <label key={m.id} className="flex items-center gap-1.5 text-xs py-0.5 cursor-pointer">
+                                    <input type="checkbox" checked={u.allowed_subtrees?.includes(m.id) || false}
+                                      onChange={() => {
+                                        const current = u.allowed_subtrees || [];
+                                        const next = current.includes(m.id) ? current.filter(s => s !== m.id) : [...current, m.id];
+                                        handleUpdatePermission(u.id, 'custom_subtrees', next);
+                                      }}
+                                      className="accent-primary" />
+                                    {m.name}
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.role !== 'admin' && (
+                      <div className="flex gap-1">
+                        {u.status === 'pending' && (
+                          <>
+                            <button onClick={() => handleApprove(u.id)} className="px-2 py-1 bg-success/10 text-success rounded-lg text-xs font-medium cursor-pointer border-none">قبول</button>
+                            <button onClick={() => handleReject(u.id)} className="px-2 py-1 bg-danger/10 text-danger rounded-lg text-xs font-medium cursor-pointer border-none">رفض</button>
+                          </>
+                        )}
+                        <button onClick={() => handleDelete(u.id)} className="px-2 py-1 bg-gray-100 text-gray-500 rounded-lg text-xs cursor-pointer border-none">حذف</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

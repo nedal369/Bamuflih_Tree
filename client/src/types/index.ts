@@ -59,6 +59,8 @@ export interface User {
   role: 'admin' | 'member' | 'pending';
   member_id: number | null;
   status: 'approved' | 'pending' | 'rejected';
+  permission_type: 'full_tree' | 'own_subtree' | 'custom_subtrees';
+  allowed_subtrees: number[];
 }
 
 export interface AuthResponse {

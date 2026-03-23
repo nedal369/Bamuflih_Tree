@@ -33,7 +33,10 @@ export const register = (username: string, password: string, full_name: string) 
 export const getUsers = () =>
   api.get<User[]>('/auth/users').then(r => r.data);
 
-export const updateUserStatus = (id: number, data: { status?: string; role?: string; member_id?: number | null }) =>
+export const createUser = (data: { username: string; password: string; full_name?: string; role?: string; member_id?: number | null; permission_type?: string; allowed_subtrees?: number[] }) =>
+  api.post<User>('/auth/users', data).then(r => r.data);
+
+export const updateUserStatus = (id: number, data: { status?: string; role?: string; member_id?: number | null; permission_type?: string; allowed_subtrees?: number[] }) =>
   api.put<User>(`/auth/users/${id}/status`, data).then(r => r.data);
 
 export const deleteUser = (id: number) =>
