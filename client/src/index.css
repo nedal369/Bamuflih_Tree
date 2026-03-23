@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@200;300;400;500;700;800;900&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #007AFF;
+  --color-primary-dark: #0056CC;
+  --color-primary-light: #4DA3FF;
+  --color-surface: #F5F5F7;
+  --color-surface-dark: #E8E8ED;
+  --color-card: #FFFFFF;
+  --color-text: #1D1D1F;
+  --color-text-secondary: #86868B;
+  --color-success: #34C759;
+  --color-danger: #FF3B30;
+  --color-warning: #FF9500;
+  --font-family-sans: 'Tajawal', sans-serif;
+}
+
+* {
+  font-family: 'Tajawal', sans-serif;
+}
+
+body {
+  direction: rtl;
+  background-color: #F5F5F7;
+  color: #1D1D1F;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #C7C7CC;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #86868B;
+}
+
+.tree-node {
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.tree-node:hover {
+  filter: brightness(0.95);
+}
+
+.tree-link {
+  fill: none;
+  stroke: #D1D1D6;
+  stroke-width: 2px;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-count {
+  animation: countUp 0.5s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}

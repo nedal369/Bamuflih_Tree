@@ -1,0 +1,18 @@
+import { Outlet } from 'react-router-dom';
+import Header from './Header';
+
+export default function Layout() {
+  return (
+    <div className="min-h-screen flex flex-col bg-surface">
+      <Header />
+      <main className="flex-1">
+        <Outlet />
+      </main>
+      <footer className="bg-white border-t border-gray-100 py-6 text-center">
+        <p className="text-sm text-text-secondary">
+          شجرة عائلة آل بامفلح &copy; {new Date().getFullYear()}
+        </p>
+      </footer>
+    </div>
+  );
+}
