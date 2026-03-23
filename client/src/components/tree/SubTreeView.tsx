@@ -163,6 +163,8 @@ export default function SubTreeView({ data, onClose: _onClose }: Props) {
               {data.member.death_date && <span>الوفاة: {data.member.death_date}</span>}
               {data.member.city && <span>المدينة: {data.member.city}</span>}
               {data.member.occupation && <span>العمل: {data.member.occupation}</span>}
+              {data.member.work_type && <span>نوع العمل: {data.member.work_type}</span>}
+              {data.member.work_place && <span>جهة العمل: {data.member.work_place}</span>}
             </div>
             {data.member.marriages && data.member.marriages.length > 0 && (
               <div className="mt-1 flex items-center gap-3 flex-wrap text-sm">

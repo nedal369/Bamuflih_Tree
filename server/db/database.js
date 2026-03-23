@@ -21,6 +21,8 @@ db.exec(`
     city TEXT,
     nationality TEXT,
     occupation TEXT,
+    work_type TEXT,
+    work_place TEXT,
     generation INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -62,6 +64,8 @@ const memberCols = db.prepare("PRAGMA table_info(members)").all().map(c => c.nam
 if (!memberCols.includes('city')) db.exec('ALTER TABLE members ADD COLUMN city TEXT');
 if (!memberCols.includes('nationality')) db.exec('ALTER TABLE members ADD COLUMN nationality TEXT');
 if (!memberCols.includes('occupation')) db.exec('ALTER TABLE members ADD COLUMN occupation TEXT');
+if (!memberCols.includes('work_type')) db.exec('ALTER TABLE members ADD COLUMN work_type TEXT');
+if (!memberCols.includes('work_place')) db.exec('ALTER TABLE members ADD COLUMN work_place TEXT');
 if (memberCols.includes('spouse_name')) {
   // Migrate old spouse_name data to marriages table if needed
 }
@@ -86,8 +90,8 @@ if (memberCount === 0) {
     const seedData = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
 
     const insertMember = db.prepare(`
-      INSERT INTO members (id, name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, generation)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO members (id, name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insertMarriage = db.prepare(`
       INSERT INTO marriages (id, husband_id, wife_id, wife_name, status, marriage_order)
@@ -96,7 +100,7 @@ if (memberCount === 0) {
 
     const seedAll = db.transaction(() => {
       for (const m of seedData.members) {
-        insertMember.run(m.id, m.name, m.father_id, m.gender, m.birth_date, m.death_date, m.bio, m.phone, m.mother_name, m.city, m.nationality, m.occupation, m.generation);
+        insertMember.run(m.id, m.name, m.father_id, m.gender, m.birth_date, m.death_date, m.bio, m.phone, m.mother_name, m.city, m.nationality, m.occupation, m.work_type || null, m.work_place || null, m.generation);
       }
       for (const mar of seedData.marriages) {
         insertMarriage.run(mar.id, mar.husband_id, mar.wife_id, mar.wife_name, mar.status, mar.marriage_order);

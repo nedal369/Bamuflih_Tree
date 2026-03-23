@@ -92,7 +92,7 @@ router.get('/:id/subtree', (req, res) => {
 
 // Create member (admin only)
 router.post('/', authenticateToken, (req, res) => {
-  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, generation } = req.body;
+  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'الاسم مطلوب' });
@@ -105,9 +105,9 @@ router.post('/', authenticateToken, (req, res) => {
   }
 
   const result = db.prepare(`
-    INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, generation)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, mother_name || null, city || null, nationality || null, occupation || null, gen);
+    INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, mother_name || null, city || null, nationality || null, occupation || null, work_type || null, work_place || null, gen);
 
   const newMember = db.prepare('SELECT * FROM members WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(newMember);
@@ -115,7 +115,7 @@ router.post('/', authenticateToken, (req, res) => {
 
 // Update member (admin or own member)
 router.put('/:id', authenticateToken, (req, res) => {
-  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, generation } = req.body;
+  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation } = req.body;
 
   // Allow admin or member editing their own subtree
   if (req.user.role !== 'admin' && req.user.member_id) {
@@ -133,7 +133,7 @@ router.put('/:id', authenticateToken, (req, res) => {
 
   db.prepare(`
     UPDATE members SET name = ?, father_id = ?, gender = ?, birth_date = ?, death_date = ?,
-    bio = ?, phone = ?, mother_name = ?, city = ?, nationality = ?, occupation = ?, generation = ?, updated_at = CURRENT_TIMESTAMP
+    bio = ?, phone = ?, mother_name = ?, city = ?, nationality = ?, occupation = ?, work_type = ?, work_place = ?, generation = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
     name || existing.name,
@@ -147,6 +147,8 @@ router.put('/:id', authenticateToken, (req, res) => {
     city !== undefined ? city : existing.city,
     nationality !== undefined ? nationality : existing.nationality,
     occupation !== undefined ? occupation : existing.occupation,
+    work_type !== undefined ? work_type : existing.work_type,
+    work_place !== undefined ? work_place : existing.work_place,
     generation || existing.generation,
     req.params.id
   );

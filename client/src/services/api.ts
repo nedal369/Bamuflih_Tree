@@ -87,6 +87,18 @@ export const uploadExcel = (file: File) => {
 export const importExcelData = (data: Record<string, string>[]) =>
   api.post('/upload/excel/import', { data }).then(r => r.data);
 
+export const downloadExcel = () =>
+  api.get('/upload/excel/download', { responseType: 'blob' }).then(r => {
+    const url = window.URL.createObjectURL(new Blob([r.data]));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'family_tree.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  });
+
 export const uploadFile = (file: File) => {
   const formData = new FormData();
   formData.append('file', file);

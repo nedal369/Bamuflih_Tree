@@ -11,6 +11,8 @@ export interface Member {
   city: string | null;
   nationality: string | null;
   occupation: string | null;
+  work_type: string | null;
+  work_place: string | null;
   generation: number;
   marriages?: Marriage[];
   created_at: string;

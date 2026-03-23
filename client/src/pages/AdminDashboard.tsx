@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   getMembers, createMember, updateMember, deleteMember,
-  uploadExcel, importExcelData, getUsers, updateUserStatus, deleteUser,
+  uploadExcel, importExcelData, downloadExcel, getUsers, updateUserStatus, deleteUser,
   addMarriage, deleteMarriage,
 } from '../services/api';
 import type { Member, ExcelUploadResponse, User, Marriage } from '../types';
@@ -25,6 +25,8 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
     city: member?.city || '',
     nationality: member?.nationality || '',
     occupation: member?.occupation || '',
+    work_type: member?.work_type || '',
+    work_place: member?.work_place || '',
   });
 
   return (
@@ -73,6 +75,22 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
         <div>
           <label className="block text-sm font-medium text-text mb-1">العمل</label>
           <input value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">نوع العمل</label>
+          <select value={form.work_type} onChange={e => setForm({ ...form, work_type: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
+            <option value="">غير محدد</option>
+            <option value="حكومي">حكومي</option>
+            <option value="خاص">خاص</option>
+            <option value="عسكري">عسكري</option>
+            <option value="حر">عمل حر</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">جهة العمل</label>
+          <input value={form.work_place} onChange={e => setForm({ ...form, work_place: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="اسم الجهة أو الشركة" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -220,7 +238,7 @@ function ExcelImport({ onDone }: { onDone: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<ExcelUploadResponse | null>(null);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; errors: { name: string; error: string }[] } | null>(null);
+  const [result, setResult] = useState<{ imported: number; updated?: number; errors: { name: string; error: string }[] } | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFile = async (file: File) => {
@@ -236,7 +254,7 @@ function ExcelImport({ onDone }: { onDone: () => void }) {
 
   if (result) return (
     <div className="p-6">
-      <div className="bg-success/10 text-success rounded-xl p-4 mb-4">تم استيراد {result.imported} عضو بنجاح</div>
+      <div className="bg-success/10 text-success rounded-xl p-4 mb-4">تم استيراد {result.imported} عضو جديد{result.updated ? ` وتحديث ${result.updated} عضو` : ''} بنجاح</div>
       {result.errors.length > 0 && (
         <div className="bg-danger/10 text-danger rounded-xl p-4">
           {result.errors.map((e, i) => <p key={i} className="text-sm">{e.name}: {e.error}</p>)}
@@ -414,11 +432,27 @@ export default function AdminDashboard() {
       {tab === 'users' && <UsersTab members={members} />}
 
       {tab === 'excel' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h3 className="text-lg font-bold text-text">استيراد من ملف Excel</h3>
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-text">تحميل ملف Excel</h3>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-text-secondary mb-4">حمّل جميع بيانات الشجرة كملف Excel، عدّل عليه ثم أعد رفعه لتحديث البيانات.</p>
+              <button
+                onClick={async () => { try { await downloadExcel(); } catch { alert('خطأ في تحميل الملف'); } }}
+                className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium text-sm cursor-pointer border-none hover:bg-emerald-700 transition-colors flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                تحميل ملف Excel
+              </button>
+            </div>
           </div>
-          <ExcelImport onDone={loadMembers} />
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-text">رفع / استيراد ملف Excel</h3>
+            </div>
+            <ExcelImport onDone={loadMembers} />
+          </div>
         </div>
       )}
 
