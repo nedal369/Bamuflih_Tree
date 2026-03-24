@@ -13,6 +13,12 @@ export interface Member {
   occupation: string | null;
   work_type: string | null;
   work_place: string | null;
+  photo: string | null;
+  whatsapp: string | null;
+  twitter: string | null;
+  instagram: string | null;
+  snapchat: string | null;
+  tiktok: string | null;
   generation: number;
   marriages?: Marriage[];
   created_at: string;
@@ -96,6 +102,18 @@ export interface User {
 export interface AuthResponse {
   token: string;
   user: User;
+}
+
+export interface Notification {
+  type: 'birthday_today' | 'birthday_upcoming' | 'new_member';
+  member_id: number;
+  name: string;
+  photo: string | null;
+  gender: 'male' | 'female';
+  message: string;
+  date: string;
+  days_until?: number;
+  priority: number;
 }
 
 export interface ExcelUploadResponse {

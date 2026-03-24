@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db/database');
 const { authenticateToken } = require('../middleware/auth');
+const upload = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -379,7 +380,7 @@ router.get('/:id/subtree', (req, res) => {
 
 // Create member (admin only)
 router.post('/', authenticateToken, (req, res) => {
-  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation } = req.body;
+  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation, photo, whatsapp, twitter, instagram, snapchat, tiktok } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'الاسم مطلوب' });
@@ -392,9 +393,9 @@ router.post('/', authenticateToken, (req, res) => {
   }
 
   const result = db.prepare(`
-    INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, mother_name || null, city || null, nationality || null, occupation || null, work_type || null, work_place || null, gen);
+    INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation, photo, whatsapp, twitter, instagram, snapchat, tiktok)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, mother_name || null, city || null, nationality || null, occupation || null, work_type || null, work_place || null, gen, photo || null, whatsapp || null, twitter || null, instagram || null, snapchat || null, tiktok || null);
 
   const newMember = db.prepare('SELECT * FROM members WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(newMember);
@@ -402,7 +403,7 @@ router.post('/', authenticateToken, (req, res) => {
 
 // Update member (admin or own member)
 router.put('/:id', authenticateToken, (req, res) => {
-  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation } = req.body;
+  const { name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation, photo, whatsapp, twitter, instagram, snapchat, tiktok } = req.body;
 
   // Permission check
   if (req.user.role !== 'admin') {
@@ -432,7 +433,8 @@ router.put('/:id', authenticateToken, (req, res) => {
 
   db.prepare(`
     UPDATE members SET name = ?, father_id = ?, gender = ?, birth_date = ?, death_date = ?,
-    bio = ?, phone = ?, mother_name = ?, city = ?, nationality = ?, occupation = ?, work_type = ?, work_place = ?, generation = ?, updated_at = CURRENT_TIMESTAMP
+    bio = ?, phone = ?, mother_name = ?, city = ?, nationality = ?, occupation = ?, work_type = ?, work_place = ?, generation = ?,
+    photo = ?, whatsapp = ?, twitter = ?, instagram = ?, snapchat = ?, tiktok = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
     name || existing.name,
@@ -449,6 +451,12 @@ router.put('/:id', authenticateToken, (req, res) => {
     work_type !== undefined ? work_type : existing.work_type,
     work_place !== undefined ? work_place : existing.work_place,
     generation || existing.generation,
+    photo !== undefined ? photo : existing.photo,
+    whatsapp !== undefined ? whatsapp : existing.whatsapp,
+    twitter !== undefined ? twitter : existing.twitter,
+    instagram !== undefined ? instagram : existing.instagram,
+    snapchat !== undefined ? snapchat : existing.snapchat,
+    tiktok !== undefined ? tiktok : existing.tiktok,
     req.params.id
   );
 
@@ -470,6 +478,17 @@ router.delete('/:id', authenticateToken, (req, res) => {
   db.prepare('DELETE FROM members WHERE id = ?').run(req.params.id);
 
   res.json({ message: 'تم حذف العضو بنجاح' });
+});
+
+// Upload member photo
+router.post('/:id/photo', authenticateToken, upload.single('photo'), (req, res) => {
+  const member = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);
+  if (!member) return res.status(404).json({ error: 'العضو غير موجود' });
+  if (!req.file) return res.status(400).json({ error: 'لم يتم رفع صورة' });
+
+  const photoPath = '/uploads/' + req.file.filename;
+  db.prepare('UPDATE members SET photo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(photoPath, req.params.id);
+  res.json({ photo: photoPath });
 });
 
 // Marriages CRUD

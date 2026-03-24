@@ -8,6 +8,7 @@ import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import SearchPage from './pages/SearchPage';
 import RelationshipPage from './pages/RelationshipPage';
+import NotificationsPage from './pages/NotificationsPage';
 import type { ReactNode } from 'react';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="/stats" element={<StatsPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/relationship" element={<RelationshipPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />

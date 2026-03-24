@@ -141,4 +141,17 @@ export const importGedcom = (file: File) => {
   }).then(r => r.data);
 };
 
+// Notifications
+export const getNotifications = () =>
+  api.get('/notifications').then(r => r.data);
+
+// Member photo upload
+export const uploadMemberPhoto = (memberId: number, file: File) => {
+  const formData = new FormData();
+  formData.append('photo', file);
+  return api.post(`/members/${memberId}/photo`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+
 export default api;

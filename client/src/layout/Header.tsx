@@ -12,6 +12,7 @@ export default function Header() {
     { path: '/stats', label: 'الإحصائيات' },
     { path: '/search', label: 'البحث' },
     { path: '/relationship', label: 'صلة القرابة' },
+    { path: '/notifications', label: 'الإشعارات' },
   ];
 
   const isActive = (path: string) => location.pathname === path;

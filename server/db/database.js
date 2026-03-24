@@ -71,6 +71,12 @@ if (!memberCols.includes('work_place')) db.exec('ALTER TABLE members ADD COLUMN 
 if (memberCols.includes('spouse_name')) {
   // Migrate old spouse_name data to marriages table if needed
 }
+if (!memberCols.includes('photo')) db.exec('ALTER TABLE members ADD COLUMN photo TEXT');
+if (!memberCols.includes('whatsapp')) db.exec('ALTER TABLE members ADD COLUMN whatsapp TEXT');
+if (!memberCols.includes('twitter')) db.exec('ALTER TABLE members ADD COLUMN twitter TEXT');
+if (!memberCols.includes('instagram')) db.exec('ALTER TABLE members ADD COLUMN instagram TEXT');
+if (!memberCols.includes('snapchat')) db.exec('ALTER TABLE members ADD COLUMN snapchat TEXT');
+if (!memberCols.includes('tiktok')) db.exec('ALTER TABLE members ADD COLUMN tiktok TEXT');
 
 const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
 if (!userCols.includes('full_name')) db.exec('ALTER TABLE users ADD COLUMN full_name TEXT');

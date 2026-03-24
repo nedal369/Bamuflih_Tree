@@ -27,6 +27,11 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
     occupation: member?.occupation || '',
     work_type: member?.work_type || '',
     work_place: member?.work_place || '',
+    whatsapp: member?.whatsapp || '',
+    twitter: member?.twitter || '',
+    instagram: member?.instagram || '',
+    snapchat: member?.snapchat || '',
+    tiktok: member?.tiktok || '',
   });
 
   return (
@@ -101,6 +106,31 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
         <div>
           <label className="block text-sm font-medium text-text mb-1">تاريخ الوفاة</label>
           <input value={form.death_date} onChange={e => setForm({ ...form, death_date: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="فارغ = على قيد الحياة" />
+        </div>
+      </div>
+      <div className="border-t border-gray-100 pt-4 mt-2">
+        <label className="block text-sm font-bold text-text mb-3">التواصل الاجتماعي</label>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">واتساب</label>
+            <input value={form.whatsapp} onChange={e => setForm({ ...form, whatsapp: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="966XXXXXXXXX" dir="ltr" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">X (تويتر)</label>
+            <input value={form.twitter} onChange={e => setForm({ ...form, twitter: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="username" dir="ltr" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">انستقرام</label>
+            <input value={form.instagram} onChange={e => setForm({ ...form, instagram: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="username" dir="ltr" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">سناب شات</label>
+            <input value={form.snapchat} onChange={e => setForm({ ...form, snapchat: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="username" dir="ltr" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">تيك توك</label>
+            <input value={form.tiktok} onChange={e => setForm({ ...form, tiktok: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="username" dir="ltr" />
+          </div>
         </div>
       </div>
       <div>
