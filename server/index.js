@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const memberRoutes = require('./routes/members');
 const statsRoutes = require('./routes/stats');
 const uploadRoutes = require('./routes/upload');
+const gedcomRoutes = require('./routes/gedcom');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +21,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/members', memberRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/gedcom', gedcomRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {

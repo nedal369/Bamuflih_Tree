@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   getMembers, createMember, updateMember, deleteMember,
   uploadExcel, importExcelData, downloadExcel, getUsers, createUser, updateUserStatus, deleteUser,
-  addMarriage, deleteMarriage,
+  addMarriage, deleteMarriage, downloadGedcom, importGedcom,
 } from '../services/api';
 import type { Member, ExcelUploadResponse, User, Marriage } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -474,11 +474,81 @@ function ExcelImport({ onDone }: { onDone: () => void }) {
   );
 }
 
+/* ─── GEDCOM Tab ─── */
+function GedcomTab({ onDone }: { onDone: () => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ imported?: number; families?: number; errors?: string[] } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleFile = async (file: File) => {
+    setUploading(true); setResult(null);
+    try {
+      const res = await importGedcom(file);
+      setResult(res);
+      onDone();
+    } catch { setResult({ errors: ['حدث خطأ في استيراد الملف'] }); }
+    finally { setUploading(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-text">تصدير GEDCOM</h3>
+        </div>
+        <div className="p-6">
+          <p className="text-sm text-text-secondary mb-4">صدّر بيانات الشجرة بصيغة GEDCOM 5.5.1 المعتمدة عالمياً للاستخدام في برامج الأنساب الأخرى.</p>
+          <button onClick={async () => { try { await downloadGedcom(); } catch { alert('خطأ في التصدير'); } }}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium text-sm cursor-pointer border-none hover:bg-indigo-700 transition-colors flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            تصدير ملف GEDCOM
+          </button>
+        </div>
+      </div>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-text">استيراد ملف GEDCOM</h3>
+        </div>
+        <div className="p-6">
+          <div onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+            className={`border-2 border-dashed rounded-2xl p-12 text-center transition-colors ${dragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'}`}>
+            {uploading ? <LoadingSpinner /> : (
+              <>
+                <p className="text-text font-medium mb-2">اسحب ملف GEDCOM هنا</p>
+                <p className="text-xs text-text-secondary mb-4">يدعم صيغة .ged و .gedcom</p>
+                <label className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium text-sm cursor-pointer">
+                  اختر ملف
+                  <input type="file" accept=".ged,.gedcom" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+                </label>
+              </>
+            )}
+          </div>
+          {result && (
+            <div className="mt-4 p-4 bg-surface rounded-xl">
+              {result.imported !== undefined && <p className="text-sm text-success font-medium">تم استيراد {result.imported} فرد و {result.families} عائلة</p>}
+              {result.errors && result.errors.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-sm text-danger font-medium">أخطاء ({result.errors.length}):</p>
+                  <ul className="text-xs text-text-secondary mt-1 max-h-32 overflow-y-auto">
+                    {result.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
+                    {result.errors.length > 10 && <li>... و {result.errors.length - 10} أخطاء أخرى</li>}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Dashboard ─── */
 export default function AdminDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'members' | 'users' | 'excel'>('members');
+  const [tab, setTab] = useState<'members' | 'users' | 'excel' | 'gedcom'>('members');
   const [showForm, setShowForm] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | undefined>();
   const [search, setSearch] = useState('');
@@ -513,6 +583,7 @@ export default function AdminDashboard() {
     { key: 'members' as const, label: 'إدارة الأعضاء' },
     { key: 'users' as const, label: 'إدارة المستخدمين' },
     { key: 'excel' as const, label: 'استيراد Excel' },
+    { key: 'gedcom' as const, label: 'GEDCOM' },
   ];
 
   if (loading) return <LoadingSpinner size="lg" />;
@@ -632,6 +703,8 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {tab === 'gedcom' && <GedcomTab onDone={loadMembers} />}
 
       <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditingMember(undefined); }}
         title={editingMember ? `تعديل: ${editingMember.name}` : 'إضافة عضو جديد'} size="lg">

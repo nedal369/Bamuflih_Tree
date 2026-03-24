@@ -37,6 +37,293 @@ router.get('/', (req, res) => {
   res.json(withMarriages);
 });
 
+// Advanced search with filtering and facets
+router.get('/search/advanced', (req, res) => {
+  const { q, city, work_place, work_type, occupation, nationality, gender, generation, alive } = req.query;
+
+  const conditions = [];
+  const params = [];
+
+  // General text search across name, bio, phone
+  if (q) {
+    conditions.push('(name LIKE ? OR bio LIKE ? OR phone LIKE ?)');
+    const pattern = `%${q}%`;
+    params.push(pattern, pattern, pattern);
+  }
+
+  // Partial match filters
+  if (city) {
+    conditions.push('city LIKE ?');
+    params.push(`%${city}%`);
+  }
+  if (work_place) {
+    conditions.push('work_place LIKE ?');
+    params.push(`%${work_place}%`);
+  }
+  if (occupation) {
+    conditions.push('occupation LIKE ?');
+    params.push(`%${occupation}%`);
+  }
+  if (nationality) {
+    conditions.push('nationality LIKE ?');
+    params.push(`%${nationality}%`);
+  }
+
+  // Exact match filters
+  if (work_type) {
+    conditions.push('work_type = ?');
+    params.push(work_type);
+  }
+  if (gender) {
+    conditions.push('gender = ?');
+    params.push(gender);
+  }
+  if (generation) {
+    conditions.push('generation = ?');
+    params.push(Number(generation));
+  }
+
+  // Alive/deceased filter: alive=true means death_date IS NULL, alive=false means death_date IS NOT NULL
+  if (alive !== undefined) {
+    if (alive === 'true') {
+      conditions.push('death_date IS NULL');
+    } else if (alive === 'false') {
+      conditions.push('death_date IS NOT NULL');
+    }
+  }
+
+  const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+  const sql = `SELECT * FROM members ${whereClause} ORDER BY generation, name`;
+
+  const members = db.prepare(sql).all(...params);
+  const results = attachMarriages(members);
+
+  // Build facets/aggregations from the matched results
+  const facets = {
+    city: {},
+    work_type: {},
+    occupation: {},
+    nationality: {}
+  };
+
+  for (const member of members) {
+    if (member.city) {
+      facets.city[member.city] = (facets.city[member.city] || 0) + 1;
+    }
+    if (member.work_type) {
+      facets.work_type[member.work_type] = (facets.work_type[member.work_type] || 0) + 1;
+    }
+    if (member.occupation) {
+      facets.occupation[member.occupation] = (facets.occupation[member.occupation] || 0) + 1;
+    }
+    if (member.nationality) {
+      facets.nationality[member.nationality] = (facets.nationality[member.nationality] || 0) + 1;
+    }
+  }
+
+  res.json({
+    total: results.length,
+    members: results,
+    facets
+  });
+});
+
+// Find relationship between two members
+router.get('/relationship/:id1/:id2', (req, res) => {
+  const id1 = parseInt(req.params.id1);
+  const id2 = parseInt(req.params.id2);
+
+  if (isNaN(id1) || isNaN(id2)) {
+    return res.status(400).json({ error: 'معرفات الأعضاء غير صالحة' });
+  }
+
+  if (id1 === id2) {
+    const member = db.prepare('SELECT * FROM members WHERE id = ?').get(id1);
+    if (!member) return res.status(404).json({ error: 'العضو غير موجود' });
+    return res.json({
+      person1: { id: member.id, name: member.name },
+      person2: { id: member.id, name: member.name },
+      relationship: 'نفس الشخص',
+      lca: { id: member.id, name: member.name },
+      path: [{ id: member.id, name: member.name }]
+    });
+  }
+
+  const allMembers = db.prepare('SELECT * FROM members').all();
+  const memberMap = new Map(allMembers.map(m => [m.id, m]));
+
+  const person1 = memberMap.get(id1);
+  const person2 = memberMap.get(id2);
+
+  if (!person1) return res.status(404).json({ error: 'العضو الأول غير موجود' });
+  if (!person2) return res.status(404).json({ error: 'العضو الثاني غير موجود' });
+
+  // Check marriage relationship
+  const marriage = db.prepare(
+    'SELECT * FROM marriages WHERE (husband_id = ? AND wife_id = ?) OR (husband_id = ? AND wife_id = ?)'
+  ).get(id1, id2, id2, id1);
+
+  if (marriage) {
+    const relationship = person1.gender === 'female' ? 'زوجة' : 'زوج';
+    return res.json({
+      person1: { id: person1.id, name: person1.name },
+      person2: { id: person2.id, name: person2.name },
+      relationship,
+      lca: null,
+      path: [{ id: person1.id, name: person1.name }, { id: person2.id, name: person2.name }]
+    });
+  }
+
+  // Build ancestor chain (from member up to root)
+  function getAncestorChain(memberId) {
+    const chain = [];
+    let currentId = memberId;
+    const visited = new Set();
+    while (currentId != null) {
+      if (visited.has(currentId)) break;
+      visited.add(currentId);
+      const member = memberMap.get(currentId);
+      if (!member) break;
+      chain.push({ id: member.id, name: member.name });
+      currentId = member.father_id;
+    }
+    return chain;
+  }
+
+  const chain1 = getAncestorChain(id1);
+  const chain2 = getAncestorChain(id2);
+
+  // Find Lowest Common Ancestor
+  const ancestors2Set = new Set(chain2.map(a => a.id));
+  let lca = null;
+  let g1 = -1;
+  for (let i = 0; i < chain1.length; i++) {
+    if (ancestors2Set.has(chain1[i].id)) {
+      lca = chain1[i];
+      g1 = i;
+      break;
+    }
+  }
+
+  if (!lca) {
+    return res.json({
+      person1: { id: person1.id, name: person1.name },
+      person2: { id: person2.id, name: person2.name },
+      relationship: 'لا توجد صلة قرابة مباشرة',
+      lca: null,
+      path: []
+    });
+  }
+
+  const g2 = chain2.findIndex(a => a.id === lca.id);
+
+  // Build path from person1 up to LCA then down to person2
+  const pathUp = chain1.slice(0, g1 + 1);
+  const pathDown = chain2.slice(0, g2).reverse();
+  const path = [...pathUp, ...pathDown];
+
+  const p1Gender = person1.gender;
+
+  // Helper for great- prefixes
+  function repeatPrefix(count, base) {
+    if (count <= 0) return base;
+    let prefix = '';
+    for (let i = 0; i < count; i++) {
+      prefix += 'أب ';
+    }
+    return prefix + base;
+  }
+
+  let relationship = '';
+
+  if (g1 === 0 && g2 === 1) {
+    // person1 is the parent of person2
+    relationship = p1Gender === 'female' ? 'أم' : 'أب';
+  } else if (g1 === 1 && g2 === 0) {
+    // person1 is the child of person2
+    relationship = p1Gender === 'female' ? 'ابنة' : 'ابن';
+  } else if (g1 === 0 && g2 > 1) {
+    // person1 is ancestor of person2 (grandparent+)
+    if (g2 === 2) {
+      relationship = p1Gender === 'female' ? 'جدة' : 'جد';
+    } else {
+      const greats = g2 - 2;
+      const base = p1Gender === 'female' ? 'جدة' : 'جد';
+      relationship = repeatPrefix(greats, base);
+    }
+  } else if (g1 > 1 && g2 === 0) {
+    // person1 is descendant of person2 (grandchild+)
+    if (g1 === 2) {
+      relationship = p1Gender === 'female' ? 'حفيدة' : 'حفيد';
+    } else {
+      const levels = g1 - 2;
+      const base = p1Gender === 'female' ? 'حفيدة' : 'حفيد';
+      let prefix = '';
+      for (let i = 0; i < levels; i++) {
+        prefix += 'ابن ';
+      }
+      relationship = prefix + base;
+    }
+  } else if (g1 === 1 && g2 === 1) {
+    // Siblings
+    relationship = p1Gender === 'female' ? 'أخت' : 'أخ';
+  } else if (g1 === 1 && g2 === 2) {
+    // Uncle/Aunt (person1 is sibling of person2's parent)
+    relationship = p1Gender === 'female' ? 'عمة' : 'عم';
+  } else if (g1 === 2 && g2 === 1) {
+    // Nephew/Niece (person1 is child of person2's sibling)
+    relationship = p1Gender === 'female' ? 'ابنة أخ' : 'ابن أخ';
+  } else if (g1 === 1 && g2 > 2) {
+    // Great uncle/aunt
+    const greats = g2 - 2;
+    const base = p1Gender === 'female' ? 'عمة' : 'عم';
+    if (greats === 1) {
+      relationship = base + ' الأب';
+    } else {
+      relationship = base + ' ' + repeatPrefix(greats - 1, 'الأب').trim();
+    }
+  } else if (g1 > 2 && g2 === 1) {
+    // Great nephew/niece
+    const levels = g1 - 2;
+    const base = p1Gender === 'female' ? 'ابنة' : 'ابن';
+    if (levels === 1) {
+      relationship = base + ' ابن أخ';
+    } else {
+      let prefix = '';
+      for (let i = 0; i < levels - 1; i++) {
+        prefix += 'ابن ';
+      }
+      relationship = base + ' ' + prefix + 'ابن أخ';
+    }
+  } else if (g1 === g2 && g1 > 1) {
+    // Cousins of same degree
+    const degree = g1 - 1;
+    if (degree === 1) {
+      relationship = p1Gender === 'female' ? 'بنت عم' : 'ابن عم';
+    } else {
+      relationship = (p1Gender === 'female' ? 'بنت عم' : 'ابن عم') + ' درجة ' + degree;
+    }
+  } else {
+    // General case: different levels from LCA
+    const minG = Math.min(g1, g2);
+    const removal = Math.abs(g1 - g2);
+    if (minG === 1) {
+      relationship = 'قريب بدرجة ' + g1 + '/' + g2 + ' من الجد المشترك';
+    } else {
+      const cousinDegree = minG - 1;
+      relationship = 'ابن عم درجة ' + cousinDegree + ' مع فارق ' + removal + ' ' + (removal === 1 ? 'جيل' : 'أجيال');
+    }
+  }
+
+  res.json({
+    person1: { id: person1.id, name: person1.name },
+    person2: { id: person2.id, name: person2.name },
+    relationship,
+    lca: { id: lca.id, name: lca.name },
+    path
+  });
+});
+
 // Get single member
 router.get('/:id', (req, res) => {
   const member = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);

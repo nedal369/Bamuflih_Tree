@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage } from '../types';
+import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage, RelationshipResult, SearchResult } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -106,6 +106,37 @@ export const uploadFile = (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
   return api.post('/upload/file', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+
+// Relationship finder
+export const findRelationship = (id1: number, id2: number) =>
+  api.get<RelationshipResult>(`/members/relationship/${id1}/${id2}`).then(r => r.data);
+
+// Advanced search
+export const searchMembers = (params: Record<string, string>) => {
+  const query = new URLSearchParams(params).toString();
+  return api.get<SearchResult>(`/members/search/advanced?${query}`).then(r => r.data);
+};
+
+// GEDCOM
+export const downloadGedcom = () =>
+  api.get('/gedcom/download', { responseType: 'blob' }).then(r => {
+    const url = window.URL.createObjectURL(new Blob([r.data]));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bamuflih_tree.ged';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  });
+
+export const importGedcom = (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post('/gedcom/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then(r => r.data);
 };

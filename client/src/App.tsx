@@ -6,6 +6,8 @@ import PersonPage from './pages/PersonPage';
 import StatsPage from './pages/StatsPage';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import SearchPage from './pages/SearchPage';
+import RelationshipPage from './pages/RelationshipPage';
 import type { ReactNode } from 'react';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -31,6 +33,8 @@ export default function App() {
             <Route path="/" element={<TreePage />} />
             <Route path="/person/:id" element={<PersonPage />} />
             <Route path="/stats" element={<StatsPage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/relationship" element={<RelationshipPage />} />
             <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />

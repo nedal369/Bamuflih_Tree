@@ -10,6 +10,8 @@ export default function Header() {
   const navItems = [
     { path: '/', label: 'الشجرة' },
     { path: '/stats', label: 'الإحصائيات' },
+    { path: '/search', label: 'البحث' },
+    { path: '/relationship', label: 'صلة القرابة' },
   ];
 
   const isActive = (path: string) => location.pathname === path;

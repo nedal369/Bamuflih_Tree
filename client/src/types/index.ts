@@ -50,6 +50,36 @@ export interface Stats {
   branches: { id: number; name: string; descendants_count: number; total_descendants: number }[];
   cityDistribution: { city: string; count: number }[];
   marriageStats: { status: string; count: number }[];
+  workTypeDistribution: { work_type: string; count: number }[];
+  workPlaceDistribution: { work_place: string; count: number }[];
+  nationalityDistribution: { nationality: string; count: number }[];
+  occupationDistribution: { occupation: string; count: number }[];
+  averageChildrenPerMember: number;
+  ageDistribution: { range: string; count: number }[];
+  youngestMember: { name: string; birth_date: string } | null;
+  oldestMember: { name: string; birth_date: string } | null;
+  mostChildren: { name: string; count: number } | null;
+  mostDescendants: { name: string; count: number } | null;
+  timelineData: { decade: string; count: number }[];
+}
+
+export interface RelationshipResult {
+  person1: { id: number; name: string };
+  person2: { id: number; name: string };
+  relationship: string;
+  lca: { id: number; name: string } | null;
+  path: { id: number; name: string }[];
+}
+
+export interface SearchResult {
+  total: number;
+  members: Member[];
+  facets: {
+    city: Record<string, number>;
+    work_type: Record<string, number>;
+    occupation: Record<string, number>;
+    nationality: Record<string, number>;
+  };
 }
 
 export interface User {
