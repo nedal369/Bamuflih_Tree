@@ -39,11 +39,11 @@ function SocialButton({ href, label, color, icon }: { href: string; label: strin
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium no-underline text-white transition-transform hover:scale-105`}
+      className="inline-flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium no-underline text-white transition-transform hover:scale-105 active:scale-95"
       style={{ backgroundColor: color }}
     >
       {icon}
-      {label}
+      <span className="hidden min-[400px]:inline">{label}</span>
     </a>
   );
 }
@@ -106,20 +106,20 @@ export default function PersonPage() {
       </Link>
 
       {/* Profile Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-        <div className="flex flex-col sm:flex-row items-start gap-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
           {/* Photo Section */}
-          <div className="flex-shrink-0 relative group">
+          <div className="flex-shrink-0 relative group mx-auto sm:mx-0">
             {member.photo ? (
               <img
                 src={member.photo}
                 alt={member.name}
-                className="w-28 h-28 rounded-2xl object-cover border-2"
+                className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2"
                 style={{ borderColor: member.gender === 'female' ? '#EC4899' : '#6366F1' }}
               />
             ) : (
               <div
-                className="w-28 h-28 rounded-2xl flex items-center justify-center text-5xl"
+                className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl flex items-center justify-center text-4xl sm:text-5xl"
                 style={{
                   backgroundColor: member.gender === 'female' ? '#FDF2F8' : '#EEF2FF',
                   border: `2px solid ${member.gender === 'female' ? '#EC4899' : '#6366F1'}`,
@@ -128,8 +128,9 @@ export default function PersonPage() {
                 {member.gender === 'female' ? '👩' : '👨'}
               </div>
             )}
+            {/* Desktop: hover overlay */}
             {isAdmin && (
-              <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+              <label className="absolute inset-0 items-center justify-center bg-black/40 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hidden md:flex">
                 <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                 {uploading ? (
                   <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -141,12 +142,26 @@ export default function PersonPage() {
                 )}
               </label>
             )}
+            {/* Mobile: visible camera button */}
+            {isAdmin && (
+              <label className="md:hidden absolute -bottom-2 -left-2 w-9 h-9 bg-primary rounded-full flex items-center justify-center shadow-lg cursor-pointer">
+                <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                {uploading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                )}
+              </label>
+            )}
           </div>
 
           {/* Info Section */}
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <h1 className="text-2xl font-bold text-text m-0">{member.name}</h1>
+            <div className="flex items-center gap-2 sm:gap-3 mb-2 flex-wrap justify-center sm:justify-start">
+              <h1 className="text-xl sm:text-2xl font-bold text-text m-0">{member.name}</h1>
               {member.death_date && <span className="text-sm bg-gray-100 px-2 py-0.5 rounded-lg text-gray-500">متوفى 🕊️</span>}
               {age && (
                 <span className="text-sm bg-primary/10 text-primary px-3 py-1 rounded-xl font-medium">
@@ -260,7 +275,7 @@ export default function PersonPage() {
               {member.phone && (
                 <a
                   href={`tel:${member.phone}`}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium no-underline bg-gray-700 text-white transition-transform hover:scale-105"
+                  className="inline-flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium no-underline bg-gray-700 text-white transition-transform hover:scale-105 active:scale-95"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />

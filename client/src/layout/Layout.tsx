@@ -8,7 +8,7 @@ export default function Layout() {
       <main className="flex-1">
         <Outlet />
       </main>
-      <footer className="bg-white border-t border-gray-100 py-6 text-center">
+      <footer className="bg-white border-t border-gray-100 py-6 text-center pb-20 md:pb-6">
         <p className="text-sm text-text-secondary">
           شجرة عائلة آل بامفلح &copy; {new Date().getFullYear()}
         </p>

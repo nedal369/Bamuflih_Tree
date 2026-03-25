@@ -51,7 +51,7 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
           ))}
         </select>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الجنس</label>
           <select value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value as 'male' | 'female' })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
@@ -64,7 +64,7 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
           <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الأم</label>
           <input value={form.mother_name} onChange={e => setForm({ ...form, mother_name: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
@@ -74,7 +74,7 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
           <input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="مكة، جدة، المدينة..." />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الجنسية</label>
           <input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="سعودي، يمني..." />
@@ -84,7 +84,7 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
           <input value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">نوع العمل</label>
           <select value={form.work_type} onChange={e => setForm({ ...form, work_type: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
@@ -100,7 +100,7 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
           <input value={form.work_place} onChange={e => setForm({ ...form, work_place: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="اسم الجهة أو الشركة" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">تاريخ الميلاد</label>
           <input value={form.birth_date} onChange={e => setForm({ ...form, birth_date: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
@@ -112,7 +112,7 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
       </div>
       <div className="border-t border-gray-100 pt-4 mt-2">
         <label className="block text-sm font-bold text-text mb-3">التواصل الاجتماعي</label>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-text mb-1">واتساب</label>
             <input value={form.whatsapp} onChange={e => setForm({ ...form, whatsapp: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="966XXXXXXXXX" dir="ltr" />
@@ -160,7 +160,7 @@ function MarriageForm({ memberId, onDone }: { memberId: number; onDone: () => vo
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 items-end">
+    <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 sm:items-end">
       <input value={wifeName} onChange={e => setWifeName(e.target.value)} placeholder="اسم الزوجة" required className="flex-1 px-3 py-2 bg-surface rounded-lg border-none text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
       <select value={status} onChange={e => setStatus(e.target.value as Marriage['status'])} className="px-3 py-2 bg-surface rounded-lg border-none text-sm">
         <option value="married">متزوج</option>
@@ -221,7 +221,7 @@ function CreateUserForm({ members, onDone }: { members: Member[]; onDone: () => 
   return (
     <form onSubmit={handleSubmit} className="p-6 space-y-4">
       {error && <div className="bg-danger/10 text-danger rounded-xl p-3 text-sm">{error}</div>}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">اسم المستخدم *</label>
           <input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
@@ -231,7 +231,7 @@ function CreateUserForm({ members, onDone }: { members: Member[]; onDone: () => 
           <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الاسم الكامل</label>
           <input value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
@@ -826,15 +826,17 @@ function AlliedFamiliesTab({ allMembers }: { allMembers: Member[] }) {
 
           return (
             <div key={family.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold text-text flex items-center gap-2">
-                    🏠 {family.name}
-                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-lg">{family.member_count || familyMembers.length} عضو</span>
-                  </h3>
-                  {family.description && <p className="text-sm text-text-secondary mt-1">{family.description}</p>}
+              <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
+                <div className="flex items-start sm:items-center justify-between gap-2 flex-wrap">
+                  <div className="min-w-0">
+                    <h3 className="text-base sm:text-lg font-bold text-text flex items-center gap-2 flex-wrap">
+                      🏠 {family.name}
+                      <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-lg">{family.member_count || familyMembers.length} عضو</span>
+                    </h3>
+                    {family.description && <p className="text-sm text-text-secondary mt-1">{family.description}</p>}
+                  </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 mt-2 flex-wrap">
                   <button onClick={() => setShowAddMember(showAddMember === family.id ? null : family.id)}
                     className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium cursor-pointer border-none">+ عضو جديد</button>
                   <button onClick={() => setLinkMember(linkMember?.familyId === family.id ? null : { familyId: family.id, memberId: '' })}
@@ -867,7 +869,7 @@ function AlliedFamiliesTab({ allMembers }: { allMembers: Member[] }) {
               {/* Add new member form */}
               {showAddMember === family.id && (
                 <form onSubmit={e => handleAddMember(e, family.id)} className="px-6 py-3 bg-green-50 border-b border-green-100">
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-5 gap-2">
                     <input value={memberForm.name} onChange={e => setMemberForm({ ...memberForm, name: e.target.value })}
                       placeholder="الاسم *" required className="px-3 py-2 bg-white rounded-lg border-none text-sm" />
                     <select value={memberForm.gender} onChange={e => setMemberForm({ ...memberForm, gender: e.target.value })}
@@ -981,16 +983,16 @@ export default function AdminDashboard() {
   if (loading) return <LoadingSpinner size="lg" />;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-        <h1 className="text-2xl font-bold text-text">لوحة التحكم</h1>
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 flex-wrap gap-2 sm:gap-4">
+        <h1 className="text-xl sm:text-2xl font-bold text-text">لوحة التحكم</h1>
         <div className="text-sm text-text-secondary">إجمالي الأعضاء: {members.length}</div>
       </div>
 
-      <div className="flex gap-1 bg-surface p-1 rounded-xl mb-6 w-fit">
+      <div className="mobile-tabs flex gap-1 bg-surface p-1 rounded-xl mb-4 sm:mb-6">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer border-none ${tab === t.key ? 'bg-white text-text shadow-sm' : 'text-text-secondary bg-transparent'}`}>
+            className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-colors cursor-pointer border-none whitespace-nowrap ${tab === t.key ? 'bg-white text-text shadow-sm' : 'text-text-secondary bg-transparent'}`}>
             {t.label}
           </button>
         ))}

@@ -561,12 +561,12 @@ export default function FamilyTree() {
     : '';
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-[100dvh] md:h-screen flex flex-col pb-16 md:pb-0">
       {/* Hero Section */}
       <div className="bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-6 py-6 text-center">
-          <h1 className="text-3xl font-black text-text mb-2">شجرة عائلة آل بامفلح</h1>
-          <p className="text-text-secondary text-sm mb-4">اضغط على أي شخص لعرض شجرته الخاصة وتفاصيله</p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-6 text-center">
+          <h1 className="text-xl sm:text-3xl font-black text-text mb-1 sm:mb-2">شجرة عائلة آل بامفلح</h1>
+          <p className="text-text-secondary text-xs sm:text-sm mb-3 sm:mb-4">اضغط على أي شخص لعرض شجرته الخاصة وتفاصيله</p>
           <div className="max-w-md mx-auto relative">
             <input
               type="text"
@@ -587,12 +587,12 @@ export default function FamilyTree() {
       <div ref={containerRef} className="flex-1 bg-surface overflow-hidden relative">
         <svg ref={svgRef} className="w-full h-full" />
         {/* Zoom controls */}
-        <div className="absolute bottom-6 left-6 flex flex-col gap-2">
-          <button onClick={() => handleZoom(1.3)} className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center text-text hover:bg-gray-50 transition-colors cursor-pointer border-none text-lg font-bold">+</button>
-          <button onClick={() => handleZoom(0.7)} className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center text-text hover:bg-gray-50 transition-colors cursor-pointer border-none text-lg font-bold">−</button>
+        <div className="absolute bottom-20 md:bottom-6 left-4 md:left-6 flex flex-col gap-2 z-10">
+          <button onClick={() => handleZoom(1.3)} className="w-11 h-11 bg-white rounded-xl shadow-lg flex items-center justify-center text-text hover:bg-gray-50 transition-colors cursor-pointer border-none text-lg font-bold active:bg-gray-100">+</button>
+          <button onClick={() => handleZoom(0.7)} className="w-11 h-11 bg-white rounded-xl shadow-lg flex items-center justify-center text-text hover:bg-gray-50 transition-colors cursor-pointer border-none text-lg font-bold active:bg-gray-100">−</button>
         </div>
-        {/* Legend */}
-        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-xl p-3 text-xs space-y-1.5 shadow-sm">
+        {/* Legend - hidden on small mobile */}
+        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-xl p-3 text-xs space-y-1.5 shadow-sm hidden sm:block">
           <div className="flex items-center gap-2"><span>🕊️</span><span className="text-text-secondary">متوفى</span></div>
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-pink-500 inline-block"></span><span className="text-text-secondary">زوجة</span></div>
           <div className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-300 inline-block" style={{borderTop: '1px dashed #ccc'}}></span><span className="text-text-secondary">مطلقة</span></div>

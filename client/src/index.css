@@ -85,3 +85,54 @@ body {
 .animate-count {
   animation: countUp 0.5s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
 }
+
+/* Mobile bottom navigation safe area */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Add bottom padding to main content so it's not hidden behind bottom nav */
+@media (max-width: 767px) {
+  #root > div {
+    padding-bottom: 4.5rem;
+  }
+}
+
+/* Mobile-friendly touch targets */
+@media (max-width: 767px) {
+  button, a, select, input[type="checkbox"], input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* But not for inline text links and small badges */
+  a.text-xs, a.text-sm, span > a {
+    min-height: auto;
+    min-width: auto;
+  }
+
+  /* Scrollable tabs */
+  .mobile-tabs {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0.5rem;
+    padding-bottom: 4px;
+  }
+  .mobile-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .mobile-tabs > * {
+    flex-shrink: 0;
+  }
+}
+
+/* Mobile table: make tables horizontally scrollable */
+.mobile-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.mobile-table-wrap table {
+  min-width: 600px;
+}

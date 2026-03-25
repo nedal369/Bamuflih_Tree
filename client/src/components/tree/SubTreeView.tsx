@@ -149,22 +149,19 @@ export default function SubTreeView({ data, onClose: _onClose }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-6 py-4 bg-surface/50 border-b border-gray-100">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className={`w-3 h-3 rounded-full ${data.member.gender === 'female' ? 'bg-pink-500' : 'bg-primary'}`} />
-              <h3 className="text-xl font-bold text-text m-0">{data.member.name}</h3>
-              {data.member.death_date && <span className="text-sm">🕊️</span>}
+      <div className="px-3 sm:px-6 py-3 sm:py-4 bg-surface/50 border-b border-gray-100">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="min-w-0 w-full sm:w-auto">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1">
+              <div className={`w-3 h-3 rounded-full flex-shrink-0 ${data.member.gender === 'female' ? 'bg-pink-500' : 'bg-primary'}`} />
+              <h3 className="text-base sm:text-xl font-bold text-text m-0 truncate">{data.member.name}</h3>
+              {data.member.death_date && <span className="text-sm flex-shrink-0">🕊️</span>}
             </div>
-            <div className="flex items-center gap-4 text-sm text-text-secondary flex-wrap">
+            <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-text-secondary flex-wrap">
               <span>الجيل: {data.member.generation}</span>
               {data.member.birth_date && <span>الميلاد: {data.member.birth_date}</span>}
-              {data.member.death_date && <span>الوفاة: {data.member.death_date}</span>}
-              {data.member.city && <span>المدينة: {data.member.city}</span>}
-              {data.member.occupation && <span>العمل: {data.member.occupation}</span>}
-              {data.member.work_type && <span>نوع العمل: {data.member.work_type}</span>}
-              {data.member.work_place && <span>جهة العمل: {data.member.work_place}</span>}
+              {data.member.death_date && <span className="hidden sm:inline">الوفاة: {data.member.death_date}</span>}
+              {data.member.city && <span className="hidden sm:inline">المدينة: {data.member.city}</span>}
             </div>
             {data.member.marriages && data.member.marriages.length > 0 && (
               <div className="mt-1 flex items-center gap-3 flex-wrap text-sm">
@@ -183,7 +180,7 @@ export default function SubTreeView({ data, onClose: _onClose }: Props) {
               </div>
             )}
           </div>
-          <button onClick={handleExportPdf} className="px-5 py-2.5 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary-dark transition-colors cursor-pointer border-none flex items-center gap-2">
+          <button onClick={handleExportPdf} className="w-full sm:w-auto px-5 py-2.5 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary-dark transition-colors cursor-pointer border-none flex items-center justify-center gap-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -193,7 +190,7 @@ export default function SubTreeView({ data, onClose: _onClose }: Props) {
           </button>
         </div>
       </div>
-      <div ref={containerRef} className="flex-1 min-h-[500px] bg-white">
+      <div ref={containerRef} className="flex-1 min-h-[300px] sm:min-h-[500px] bg-white">
         <svg ref={svgRef} className="w-full h-full" />
       </div>
     </div>

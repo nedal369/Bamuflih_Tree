@@ -30,7 +30,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center md:p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -39,24 +39,26 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
             onClick={onClose}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className={`relative bg-white rounded-2xl shadow-2xl ${sizes[size]} w-full overflow-hidden`}
+            className={`relative bg-white shadow-2xl w-full overflow-hidden rounded-t-2xl md:rounded-2xl ${size === 'full' ? 'max-h-[95vh] md:max-w-[95vw]' : `max-h-[90vh] md:max-h-[80vh] ${sizes[size]}`}`}
           >
             {title && (
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h2 className="text-lg font-bold text-text m-0">{title}</h2>
+              <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+                {/* Mobile drag indicator */}
+                <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-8 h-1 bg-gray-300 rounded-full md:hidden" />
+                <h2 className="text-base md:text-lg font-bold text-text m-0 mt-1 md:mt-0">{title}</h2>
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 rounded-full hover:bg-surface flex items-center justify-center text-text-secondary hover:text-text transition-colors cursor-pointer bg-transparent border-none text-xl"
+                  className="w-10 h-10 rounded-full hover:bg-surface flex items-center justify-center text-text-secondary hover:text-text transition-colors cursor-pointer bg-transparent border-none text-xl"
                 >
                   &times;
                 </button>
               </div>
             )}
-            <div className="overflow-y-auto max-h-[80vh]">
+            <div className="overflow-y-auto" style={{ maxHeight: title ? 'calc(90vh - 3.5rem)' : '90vh' }}>
               {children}
             </div>
           </motion.div>
