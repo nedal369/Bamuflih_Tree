@@ -10,10 +10,66 @@ import type { Member, ExcelUploadResponse, User, Marriage, ActivityLog, AlliedFa
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import Modal from '../components/common/Modal';
 
+/* ─── Searchable Member Picker ─── */
+function MemberPicker({ label, members, selectedId, onSelect, excludeIds, placeholder }: {
+  label: string; members: Member[]; selectedId: number | string | null;
+  onSelect: (id: number | null) => void; excludeIds?: number[];
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const filtered = query.trim()
+    ? members.filter(m => !(excludeIds || []).includes(m.id) && m.name.includes(query.trim())).slice(0, 12)
+    : [];
+  const selected = members.find(m => m.id === Number(selectedId));
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-text mb-1">{label}</label>
+      {selected ? (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-xl">
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${selected.gender === 'female' ? 'bg-pink-100 text-pink-600' : 'bg-primary/10 text-primary'}`}>
+            {selected.gender === 'female' ? '♀' : '♂'}
+          </div>
+          <span className="flex-1 text-sm font-medium text-text truncate">{selected.name}</span>
+          <span className="text-xs text-text-secondary">الجيل {selected.generation}</span>
+          <button type="button" onClick={() => onSelect(null)} className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-danger text-xs cursor-pointer">✕</button>
+        </div>
+      ) : (
+        <div className="relative">
+          <input type="text" value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => query.trim() && setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 200)}
+            placeholder={placeholder || 'ابحث بالاسم...'} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
+          {open && filtered.length > 0 && (
+            <ul className="absolute z-30 top-full mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-100 max-h-48 overflow-y-auto">
+              {filtered.map(m => (
+                <li key={m.id}>
+                  <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => { onSelect(m.id); setQuery(''); setOpen(false); }}
+                    className="w-full text-start px-4 py-2.5 flex items-center gap-2 hover:bg-surface transition-colors text-sm">
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${m.gender === 'female' ? 'bg-pink-100 text-pink-600' : 'bg-primary/10 text-primary'}`}>{m.gender === 'female' ? '♀' : '♂'}</span>
+                    <span className="truncate">{m.name}</span>
+                    <span className="text-xs text-text-secondary ms-auto">الجيل {m.generation}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Member Form ─── */
+interface MemberFormResult {
+  memberData: Partial<Member>;
+  wives: { name: string; wife_id?: number | null; status: string }[];
+  children: { name: string; gender: string; existingId?: number }[];
+}
+
 function MemberForm({ member, allMembers, onSave, onCancel }: {
   member?: Member; allMembers: Member[];
-  onSave: (data: Partial<Member>) => void; onCancel: () => void;
+  onSave: (result: MemberFormResult) => void; onCancel: () => void;
 }) {
   const [form, setForm] = useState({
     name: member?.name || '',
@@ -36,21 +92,99 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
     tiktok: member?.tiktok || '',
   });
 
+  // Relationship additions (only for new members)
+  const [wives, setWives] = useState<{ name: string; wife_id?: number | null; status: string }[]>([]);
+  const [newWifeName, setNewWifeName] = useState('');
+  const [newWifeStatus, setNewWifeStatus] = useState('married');
+  const [wifeMode, setWifeMode] = useState<'new' | 'existing'>('new');
+  const [children, setChildren] = useState<{ name: string; gender: string; existingId?: number }[]>([]);
+  const [newChildName, setNewChildName] = useState('');
+  const [newChildGender, setNewChildGender] = useState('male');
+  const [childMode, setChildMode] = useState<'new' | 'existing'>('new');
+  // Get father's wives for mother selection
+  const fatherId = form.father_id ? Number(form.father_id) : null;
+  const father = fatherId ? allMembers.find(m => m.id === fatherId) : null;
+  const fatherWives = father?.marriages || [];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const memberData = { ...form, father_id: form.father_id ? Number(form.father_id) : null } as Partial<Member>;
+    onSave({ memberData, wives, children });
+  };
+
+  const addWife = () => {
+    if (!newWifeName.trim()) return;
+    setWives([...wives, { name: newWifeName.trim(), status: newWifeStatus }]);
+    setNewWifeName(''); setNewWifeStatus('married');
+  };
+
+  const addExistingWife = (memberId: number) => {
+    const m = allMembers.find(x => x.id === memberId);
+    if (!m) return;
+    setWives([...wives, { name: m.name, wife_id: m.id, status: 'married' }]);
+  };
+
+  const addChild = () => {
+    if (!newChildName.trim()) return;
+    setChildren([...children, { name: newChildName.trim(), gender: newChildGender }]);
+    setNewChildName(''); setNewChildGender('male');
+  };
+
+  const addExistingChild = (memberId: number) => {
+    const m = allMembers.find(x => x.id === memberId);
+    if (!m) return;
+    setChildren([...children, { name: m.name, gender: m.gender, existingId: m.id }]);
+  };
+
   return (
-    <form onSubmit={e => { e.preventDefault(); onSave({ ...form, father_id: form.father_id ? Number(form.father_id) : null } as Partial<Member>); }} className="p-6 space-y-4">
+    <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
       <div>
         <label className="block text-sm font-medium text-text mb-1">الاسم *</label>
         <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" required />
       </div>
+
+      {/* Father - searchable */}
+      <MemberPicker
+        label="الأب"
+        members={allMembers.filter(m => m.id !== member?.id && m.gender === 'male')}
+        selectedId={form.father_id || null}
+        onSelect={id => setForm({ ...form, father_id: id || '', mother_name: '' })}
+        placeholder="ابحث عن الأب..."
+      />
+
+      {/* Mother - depends on father */}
       <div>
-        <label className="block text-sm font-medium text-text mb-1">الأب</label>
-        <select value={form.father_id} onChange={e => setForm({ ...form, father_id: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
-          <option value="">بدون أب</option>
-          {allMembers.filter(m => m.id !== member?.id).map(m => (
-            <option key={m.id} value={m.id}>{m.name} (الجيل {m.generation})</option>
-          ))}
-        </select>
+        <label className="block text-sm font-medium text-text mb-1">الأم</label>
+        {fatherId && fatherWives.length > 0 ? (
+          <div className="space-y-2">
+            <select
+              value={form.mother_name}
+              onChange={e => setForm({ ...form, mother_name: e.target.value })}
+              className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+            >
+              <option value="">اختر الأم من زوجات الأب...</option>
+              {fatherWives.map((w, i) => (
+                <option key={i} value={w.wife_name}>
+                  {w.wife_name} ({w.status === 'married' ? 'متزوجة' : w.status === 'divorced' ? 'مطلقة' : w.status === 'widowed' ? 'أرملة' : 'متوفاة'})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-text-secondary">* يتم عرض زوجات وطليقات الأب المحدد فقط</p>
+          </div>
+        ) : fatherId && fatherWives.length === 0 ? (
+          <div className="space-y-2">
+            <input value={form.mother_name} onChange={e => setForm({ ...form, mother_name: e.target.value })}
+              className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+              placeholder="اسم الأم (لا توجد زوجات مسجلة للأب)" />
+            <p className="text-xs text-warning">لا توجد زوجات مسجلة لهذا الأب. أدخل الاسم يدوياً أو أضف زوجة أولاً.</p>
+          </div>
+        ) : (
+          <input value={form.mother_name} onChange={e => setForm({ ...form, mother_name: e.target.value })}
+            className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+            placeholder="اسم الأم" />
+        )}
       </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الجنس</label>
@@ -66,14 +200,9 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-text mb-1">الأم</label>
-          <input value={form.mother_name} onChange={e => setForm({ ...form, mother_name: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
-        </div>
-        <div>
           <label className="block text-sm font-medium text-text mb-1">المدينة</label>
           <input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="مكة، جدة، المدينة..." />
         </div>
-      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الجنسية</label>
@@ -139,6 +268,89 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
         <label className="block text-sm font-medium text-text mb-1">ملاحظات</label>
         <textarea value={form.bio} onChange={e => setForm({ ...form, bio: e.target.value })} rows={2} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm resize-none" />
       </div>
+
+      {/* ─── Wives Section (only for new male members) ─── */}
+      {!member && form.gender === 'male' && (
+        <div className="border-t border-gray-100 pt-4 mt-2">
+          <label className="block text-sm font-bold text-text mb-3">الزوجات</label>
+          {wives.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {wives.map((w, i) => (
+                <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-50 text-pink-700 rounded-xl text-xs font-medium">
+                  {w.name} ({w.status === 'married' ? 'متزوجة' : w.status === 'divorced' ? 'مطلقة' : 'أرملة'})
+                  {w.wife_id && <span className="text-pink-400">(مرتبطة)</span>}
+                  <button type="button" onClick={() => setWives(wives.filter((_, j) => j !== i))} className="text-pink-400 hover:text-danger cursor-pointer bg-transparent border-none">✕</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 mb-2">
+            <button type="button" onClick={() => setWifeMode('new')} className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer border-none ${wifeMode === 'new' ? 'bg-pink-500 text-white' : 'bg-surface text-text-secondary'}`}>إضافة جديدة</button>
+            <button type="button" onClick={() => setWifeMode('existing')} className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer border-none ${wifeMode === 'existing' ? 'bg-pink-500 text-white' : 'bg-surface text-text-secondary'}`}>اختيار من الشجرة</button>
+          </div>
+          {wifeMode === 'new' ? (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input value={newWifeName} onChange={e => setNewWifeName(e.target.value)} placeholder="اسم الزوجة" className="flex-1 px-3 py-2.5 bg-surface rounded-xl border-none text-sm focus:outline-none focus:ring-2 focus:ring-pink-200" />
+              <select value={newWifeStatus} onChange={e => setNewWifeStatus(e.target.value)} className="px-3 py-2.5 bg-surface rounded-xl border-none text-sm">
+                <option value="married">متزوجة</option>
+                <option value="divorced">مطلقة</option>
+                <option value="widowed">أرملة</option>
+                <option value="deceased">متوفاة</option>
+              </select>
+              <button type="button" onClick={addWife} className="px-4 py-2.5 bg-pink-500 text-white rounded-xl text-sm font-medium cursor-pointer border-none">+</button>
+            </div>
+          ) : (
+            <MemberPicker
+              label=""
+              members={allMembers.filter(m => m.gender === 'female' && !wives.some(w => w.wife_id === m.id))}
+              selectedId={null}
+              onSelect={id => { if (id) addExistingWife(id); }}
+              placeholder="ابحث عن زوجة من الشجرة..."
+            />
+          )}
+        </div>
+      )}
+
+      {/* ─── Children Section (only for new male members) ─── */}
+      {!member && form.gender === 'male' && (
+        <div className="border-t border-gray-100 pt-4 mt-2">
+          <label className="block text-sm font-bold text-text mb-3">الأبناء</label>
+          {children.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {children.map((c, i) => (
+                <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-xl text-xs font-medium">
+                  {c.gender === 'female' ? '♀' : '♂'} {c.name}
+                  {c.existingId && <span className="text-blue-400">(مرتبط)</span>}
+                  <button type="button" onClick={() => setChildren(children.filter((_, j) => j !== i))} className="text-blue-400 hover:text-danger cursor-pointer bg-transparent border-none">✕</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 mb-2">
+            <button type="button" onClick={() => setChildMode('new')} className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer border-none ${childMode === 'new' ? 'bg-blue-500 text-white' : 'bg-surface text-text-secondary'}`}>إضافة جديد</button>
+            <button type="button" onClick={() => setChildMode('existing')} className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer border-none ${childMode === 'existing' ? 'bg-blue-500 text-white' : 'bg-surface text-text-secondary'}`}>اختيار من الشجرة</button>
+          </div>
+          {childMode === 'new' ? (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input value={newChildName} onChange={e => setNewChildName(e.target.value)} placeholder="اسم الابن/الابنة" className="flex-1 px-3 py-2.5 bg-surface rounded-xl border-none text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              <select value={newChildGender} onChange={e => setNewChildGender(e.target.value)} className="px-3 py-2.5 bg-surface rounded-xl border-none text-sm">
+                <option value="male">ذكر</option>
+                <option value="female">أنثى</option>
+              </select>
+              <button type="button" onClick={addChild} className="px-4 py-2.5 bg-blue-500 text-white rounded-xl text-sm font-medium cursor-pointer border-none">+</button>
+            </div>
+          ) : (
+            <MemberPicker
+              label=""
+              members={allMembers.filter(m => !children.some(c => c.existingId === m.id))}
+              selectedId={null}
+              onSelect={id => { if (id) addExistingChild(id); }}
+              placeholder="ابحث عن ابن/ابنة من الشجرة..."
+            />
+          )}
+        </div>
+      )}
+
       <div className="flex gap-3 pt-2">
         <button type="submit" className="flex-1 py-3 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary-dark transition-colors cursor-pointer border-none">{member ? 'تحديث' : 'إضافة'}</button>
         <button type="button" onClick={onCancel} className="px-6 py-3 bg-surface text-text rounded-xl font-medium text-sm cursor-pointer border-none">إلغاء</button>
@@ -953,10 +1165,35 @@ export default function AdminDashboard() {
 
   useEffect(() => { loadMembers(); }, [loadMembers]);
 
-  const handleSave = async (data: Partial<Member>) => {
+  const handleSave = async (result: MemberFormResult) => {
     try {
-      if (editingMember) await updateMember(editingMember.id, data);
-      else await createMember(data);
+      if (editingMember) {
+        await updateMember(editingMember.id, result.memberData);
+      } else {
+        // Create member first
+        const newMember = await createMember(result.memberData);
+
+        // Add wives if any (only for new male members)
+        if (result.wives.length > 0 && result.memberData.gender === 'male') {
+          for (const wife of result.wives) {
+            await addMarriage(newMember.id, { wife_name: wife.name, wife_id: wife.wife_id || null, status: wife.status as 'married' | 'divorced' | 'widowed' | 'deceased' });
+          }
+        }
+
+        // Add/link children if any
+        if (result.children.length > 0) {
+          const newGen = (newMember.generation || 1) + 1;
+          for (const child of result.children) {
+            if (child.existingId) {
+              // Link existing member as child
+              await updateMember(child.existingId, { father_id: newMember.id, generation: newGen } as Partial<Member>);
+            } else {
+              // Create new child
+              await createMember({ name: child.name, father_id: newMember.id, gender: child.gender as 'male' | 'female', generation: newGen } as Partial<Member>);
+            }
+          }
+        }
+      }
       setShowForm(false); setEditingMember(undefined); loadMembers();
     } catch { alert('حدث خطأ'); }
   };
