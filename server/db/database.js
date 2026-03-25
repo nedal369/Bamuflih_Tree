@@ -59,6 +59,27 @@ db.exec(`
     uploaded_by INTEGER REFERENCES users(id),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id INTEGER,
+    entity_name TEXT,
+    details TEXT,
+    old_data TEXT,
+    new_data TEXT,
+    user_id INTEGER REFERENCES users(id),
+    username TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS allied_families (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Add columns if they don't exist (for existing databases)
@@ -77,6 +98,7 @@ if (!memberCols.includes('twitter')) db.exec('ALTER TABLE members ADD COLUMN twi
 if (!memberCols.includes('instagram')) db.exec('ALTER TABLE members ADD COLUMN instagram TEXT');
 if (!memberCols.includes('snapchat')) db.exec('ALTER TABLE members ADD COLUMN snapchat TEXT');
 if (!memberCols.includes('tiktok')) db.exec('ALTER TABLE members ADD COLUMN tiktok TEXT');
+if (!memberCols.includes('family_id')) db.exec('ALTER TABLE members ADD COLUMN family_id INTEGER REFERENCES allied_families(id) ON DELETE SET NULL');
 
 const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
 if (!userCols.includes('full_name')) db.exec('ALTER TABLE users ADD COLUMN full_name TEXT');
@@ -89,6 +111,8 @@ if (!userCols.includes('allowed_subtrees')) db.exec('ALTER TABLE users ADD COLUM
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_husband ON marriages(husband_id)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_wife ON marriages(wife_id)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_members_city ON members(city)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_members_family ON members(family_id)');
 
 // Auto-seed data if members table is empty
 const memberCount = db.prepare('SELECT COUNT(*) as count FROM members').get().count;

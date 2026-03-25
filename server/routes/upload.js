@@ -4,6 +4,7 @@ const path = require('path');
 const db = require('../db/database');
 const { authenticateToken } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { logActivity } = require('./activityLog');
 
 const router = express.Router();
 
@@ -155,7 +156,7 @@ router.post('/excel', authenticateToken, upload.single('file'), (req, res) => {
   }
 });
 
-// Import parsed Excel data (update existing + add new)
+// Import parsed Excel data (two-pass: 1. create/update members, 2. link relationships)
 router.post('/excel/import', authenticateToken, (req, res) => {
   const { data } = req.body;
 
@@ -165,105 +166,166 @@ router.post('/excel/import', authenticateToken, (req, res) => {
 
   let imported = 0;
   let updated = 0;
+  let relationshipsLinked = 0;
+  let marriagesCreated = 0;
   let errors = [];
+  const createdMemberIds = [];
 
   const importMany = db.transaction((records) => {
+    // ─── PASS 1: Create/update all members without father_id ───
+    const nameToRecord = new Map();
     for (const record of records) {
       try {
         if (!record.name) {
           errors.push({ name: '(فارغ)', error: 'الاسم مطلوب' });
           continue;
         }
-
-        // Try to find father by name
-        let fatherId = null;
-        if (record.father_name) {
-          const father = db.prepare('SELECT id FROM members WHERE name = ?').get(record.father_name);
-          if (!father) {
-            const fuzzy = db.prepare('SELECT id FROM members WHERE name LIKE ?').get(`%${record.father_name}%`);
-            if (fuzzy) fatherId = fuzzy.id;
-          } else {
-            fatherId = father.id;
-          }
-        }
-
-        let gen = record.generation ? parseInt(record.generation) : null;
-        if (fatherId && !gen) {
-          const father = db.prepare('SELECT generation FROM members WHERE id = ?').get(fatherId);
-          if (father) gen = father.generation + 1;
-        }
-        if (!gen) gen = 1;
+        nameToRecord.set(record.name.trim(), record);
 
         const gender = record.gender === 'أنثى' || record.gender === 'female' ? 'female' : 'male';
 
         // Check if member already exists (exact name match)
-        const existing = db.prepare('SELECT id FROM members WHERE name = ?').get(record.name);
+        const existing = db.prepare('SELECT id FROM members WHERE name = ?').get(record.name.trim());
 
         if (existing) {
-          // Update existing member
           db.prepare(`
-            UPDATE members SET father_id = COALESCE(?, father_id), gender = ?,
+            UPDATE members SET gender = ?,
             birth_date = COALESCE(?, birth_date), death_date = COALESCE(?, death_date),
             bio = COALESCE(?, bio), phone = COALESCE(?, phone),
             mother_name = COALESCE(?, mother_name), city = COALESCE(?, city),
-            nationality = COALESCE(?, nationality), work_type = COALESCE(?, work_type),
-            work_place = COALESCE(?, work_place), generation = ?,
+            nationality = COALESCE(?, nationality), occupation = COALESCE(?, occupation),
+            work_type = COALESCE(?, work_type), work_place = COALESCE(?, work_place),
             updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `).run(
-            fatherId, gender,
+            gender,
             record.birth_date || null, record.death_date || null,
             record.bio || null, record.phone || null,
             record.mother_name || null, record.city || null,
-            record.nationality || null, record.work_type || null,
-            record.work_place || null, gen,
+            record.nationality || null, record.occupation || null,
+            record.work_type || null, record.work_place || null,
             existing.id
           );
           updated++;
         } else {
-          // Insert new member
-          db.prepare(`
-            INSERT INTO members (name, father_id, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, work_type, work_place, generation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          const result = db.prepare(`
+            INSERT INTO members (name, gender, birth_date, death_date, bio, phone, mother_name, city, nationality, occupation, work_type, work_place, generation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
           `).run(
-            record.name, fatherId, gender,
+            record.name.trim(), gender,
             record.birth_date || null, record.death_date || null,
             record.bio || null, record.phone || null,
             record.mother_name || null, record.city || null,
-            record.nationality || null, record.work_type || null,
-            record.work_place || null, gen
+            record.nationality || null, record.occupation || null,
+            record.work_type || null, record.work_place || null
           );
+          createdMemberIds.push(result.lastInsertRowid);
           imported++;
-        }
-
-        // Handle spouse/marriage if provided
-        if (record.spouse_name && gender === 'male') {
-          const existingMarriage = db.prepare(
-            'SELECT id FROM marriages WHERE husband_id = (SELECT id FROM members WHERE name = ?) AND wife_name = ?'
-          ).get(record.name, record.spouse_name);
-          if (!existingMarriage) {
-            const memberId = db.prepare('SELECT id FROM members WHERE name = ?').get(record.name);
-            if (memberId) {
-              const order = (db.prepare('SELECT MAX(marriage_order) as max FROM marriages WHERE husband_id = ?').get(memberId.id)?.max || 0) + 1;
-              const wifeId = db.prepare('SELECT id FROM members WHERE name = ?').get(record.spouse_name);
-              db.prepare('INSERT INTO marriages (husband_id, wife_id, wife_name, status, marriage_order) VALUES (?, ?, ?, ?, ?)').run(
-                memberId.id, wifeId?.id || null, record.spouse_name, 'married', order
-              );
-            }
-          }
         }
       } catch (err) {
         errors.push({ name: record.name || '(فارغ)', error: err.message });
+      }
+    }
+
+    // ─── PASS 2: Link father-child relationships ───
+    for (const record of records) {
+      try {
+        if (!record.name || !record.father_name) continue;
+
+        const member = db.prepare('SELECT id FROM members WHERE name = ?').get(record.name.trim());
+        if (!member) continue;
+
+        // Try exact match first, then fuzzy
+        let father = db.prepare('SELECT id, generation FROM members WHERE name = ?').get(record.father_name.trim());
+        if (!father) {
+          father = db.prepare('SELECT id, generation FROM members WHERE name LIKE ?').get(`%${record.father_name.trim()}%`);
+        }
+        if (father) {
+          const gen = father.generation + 1;
+          db.prepare('UPDATE members SET father_id = ?, generation = ? WHERE id = ?').run(father.id, gen, member.id);
+          relationshipsLinked++;
+        }
+      } catch (err) {
+        errors.push({ name: record.name || '?', error: 'خطأ في ربط العلاقة: ' + err.message });
+      }
+    }
+
+    // ─── PASS 3: Recalculate generations from roots downward ───
+    function recalcGenerations(parentId, generation) {
+      const children = db.prepare('SELECT id FROM members WHERE father_id = ?').all(parentId);
+      for (const child of children) {
+        db.prepare('UPDATE members SET generation = ? WHERE id = ?').run(generation, child.id);
+        recalcGenerations(child.id, generation + 1);
+      }
+    }
+    // Find root members (no father) and recalculate
+    const roots = db.prepare('SELECT id FROM members WHERE father_id IS NULL').all();
+    for (const root of roots) {
+      db.prepare('UPDATE members SET generation = 1 WHERE id = ?').run(root.id);
+      recalcGenerations(root.id, 2);
+    }
+
+    // ─── PASS 4: Link marriages/spouses ───
+    for (const record of records) {
+      try {
+        if (!record.name || !record.spouse_name) continue;
+
+        const spouseNames = record.spouse_name.split(/[,،]/).map(s => s.trim()).filter(Boolean);
+        const member = db.prepare('SELECT id, gender FROM members WHERE name = ?').get(record.name.trim());
+        if (!member) continue;
+
+        for (const spouseName of spouseNames) {
+          // Determine husband/wife based on gender
+          let husbandId, wifeId, wifeName;
+          const spouse = db.prepare('SELECT id FROM members WHERE name = ?').get(spouseName);
+
+          if (member.gender === 'male') {
+            husbandId = member.id;
+            wifeId = spouse?.id || null;
+            wifeName = spouseName;
+          } else {
+            // Female: spouse is husband
+            if (spouse) {
+              husbandId = spouse.id;
+              wifeId = member.id;
+              wifeName = record.name.trim();
+            } else {
+              continue; // Can't create marriage without husband in DB
+            }
+          }
+
+          // Check if this marriage already exists
+          const existingMarriage = db.prepare(
+            'SELECT id FROM marriages WHERE husband_id = ? AND (wife_name = ? OR wife_id = ?)'
+          ).get(husbandId, wifeName, wifeId || -1);
+
+          if (!existingMarriage) {
+            const order = (db.prepare('SELECT MAX(marriage_order) as max FROM marriages WHERE husband_id = ?').get(husbandId)?.max || 0) + 1;
+            db.prepare('INSERT INTO marriages (husband_id, wife_id, wife_name, status, marriage_order) VALUES (?, ?, ?, ?, ?)').run(
+              husbandId, wifeId, wifeName, 'married', order
+            );
+            marriagesCreated++;
+          }
+        }
+      } catch (err) {
+        errors.push({ name: record.name || '?', error: 'خطأ في ربط الزواج: ' + err.message });
       }
     }
   });
 
   importMany(data);
 
+  // Log the import activity
+  logActivity('import', 'member', null, null,
+    `استيراد Excel: ${imported} جديد، ${updated} تحديث، ${relationshipsLinked} علاقة، ${marriagesCreated} زواج`,
+    null, JSON.stringify({ member_ids: createdMemberIds, imported, updated, relationshipsLinked, marriagesCreated }), req.user);
+
   res.json({
-    message: `تم استيراد ${imported} سجل جديد وتحديث ${updated} سجل`,
+    message: `تم استيراد ${imported} سجل جديد وتحديث ${updated} سجل وربط ${relationshipsLinked} علاقة و ${marriagesCreated} زواج`,
     imported,
     updated,
+    relationshipsLinked,
+    marriagesCreated,
     errors
   });
 });

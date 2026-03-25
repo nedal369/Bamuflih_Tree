@@ -19,6 +19,8 @@ export interface Member {
   instagram: string | null;
   snapchat: string | null;
   tiktok: string | null;
+  family_id: number | null;
+  family_name?: string;
   generation: number;
   marriages?: Marriage[];
   created_at: string;
@@ -114,6 +116,28 @@ export interface Notification {
   date: string;
   days_until?: number;
   priority: number;
+}
+
+export interface ActivityLog {
+  id: number;
+  action: 'create' | 'update' | 'delete' | 'import';
+  entity_type: 'member' | 'marriage' | 'family';
+  entity_id: number | null;
+  entity_name: string | null;
+  details: string | null;
+  old_data: string | null;
+  new_data: string | null;
+  user_id: number | null;
+  username: string | null;
+  created_at: string;
+}
+
+export interface AlliedFamily {
+  id: number;
+  name: string;
+  description: string | null;
+  member_count?: number;
+  created_at: string;
 }
 
 export interface ExcelUploadResponse {

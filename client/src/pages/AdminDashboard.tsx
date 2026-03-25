@@ -3,8 +3,10 @@ import {
   getMembers, createMember, updateMember, deleteMember,
   uploadExcel, importExcelData, downloadExcel, getUsers, createUser, updateUserStatus, deleteUser,
   addMarriage, deleteMarriage, downloadGedcom, importGedcom,
+  getActivityLog, revertActivity,
+  getAlliedFamilies, createAlliedFamily, deleteAlliedFamily, addFamilyMember,
 } from '../services/api';
-import type { Member, ExcelUploadResponse, User, Marriage } from '../types';
+import type { Member, ExcelUploadResponse, User, Marriage, ActivityLog, AlliedFamily } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import Modal from '../components/common/Modal';
 
@@ -445,7 +447,7 @@ function ExcelImport({ onDone }: { onDone: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<ExcelUploadResponse | null>(null);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; updated?: number; errors: { name: string; error: string }[] } | null>(null);
+  const [result, setResult] = useState<{ imported: number; updated?: number; relationshipsLinked?: number; marriagesCreated?: number; errors: { name: string; error: string }[] } | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFile = async (file: File) => {
@@ -461,7 +463,13 @@ function ExcelImport({ onDone }: { onDone: () => void }) {
 
   if (result) return (
     <div className="p-6">
-      <div className="bg-success/10 text-success rounded-xl p-4 mb-4">تم استيراد {result.imported} عضو جديد{result.updated ? ` وتحديث ${result.updated} عضو` : ''} بنجاح</div>
+      <div className="bg-success/10 text-success rounded-xl p-4 mb-4">
+        تم استيراد {result.imported} عضو جديد
+        {result.updated ? ` وتحديث ${result.updated} عضو` : ''}
+        {result.relationshipsLinked ? ` وربط ${result.relationshipsLinked} علاقة أب-ابن` : ''}
+        {result.marriagesCreated ? ` و${result.marriagesCreated} زواج` : ''}
+        {' '}بنجاح
+      </div>
       {result.errors.length > 0 && (
         <div className="bg-danger/10 text-danger rounded-xl p-4">
           {result.errors.map((e, i) => <p key={i} className="text-sm">{e.name}: {e.error}</p>)}
@@ -574,11 +582,363 @@ function GedcomTab({ onDone }: { onDone: () => void }) {
   );
 }
 
+/* ─── Activity Log Tab ─── */
+function ActivityLogTab() {
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [filter, setFilter] = useState<{ entity_type?: string; action?: string }>({});
+  const [reverting, setReverting] = useState<number | null>(null);
+  const [confirmRevert, setConfirmRevert] = useState<number | null>(null);
+
+  const loadLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await getActivityLog({ page, ...filter });
+      setLogs(result.logs);
+      setTotalPages(result.pages);
+    } catch { }
+    setLoading(false);
+  }, [page, filter]);
+
+  useEffect(() => { loadLogs(); }, [loadLogs]);
+
+  const handleRevert = async (id: number) => {
+    setReverting(id);
+    try {
+      await revertActivity(id);
+      setConfirmRevert(null);
+      loadLogs();
+    } catch { alert('خطأ في التراجع'); }
+    setReverting(null);
+  };
+
+  const actionLabels: Record<string, { label: string; color: string }> = {
+    create: { label: 'إضافة', color: 'bg-green-100 text-green-800' },
+    update: { label: 'تعديل', color: 'bg-blue-100 text-blue-800' },
+    delete: { label: 'حذف', color: 'bg-red-100 text-red-800' },
+    import: { label: 'استيراد', color: 'bg-purple-100 text-purple-800' },
+    revert_create: { label: 'تراجع (استعادة)', color: 'bg-amber-100 text-amber-800' },
+    revert_update: { label: 'تراجع (تعديل)', color: 'bg-amber-100 text-amber-800' },
+    revert_delete: { label: 'تراجع (حذف)', color: 'bg-amber-100 text-amber-800' },
+    revert_import: { label: 'تراجع (استيراد)', color: 'bg-amber-100 text-amber-800' },
+  };
+
+  const entityLabels: Record<string, string> = { member: 'عضو', marriage: 'زواج', family: 'عائلة' };
+
+  const canRevert = (action: string) => ['create', 'update', 'delete', 'import'].includes(action);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 flex-wrap">
+        <select value={filter.entity_type || ''} onChange={e => { setFilter(f => ({ ...f, entity_type: e.target.value || undefined })); setPage(1); }}
+          className="px-3 py-2 bg-surface rounded-xl border-none text-sm">
+          <option value="">كل الأنواع</option>
+          <option value="member">أعضاء</option>
+          <option value="marriage">زواج</option>
+          <option value="family">عائلات</option>
+        </select>
+        <select value={filter.action || ''} onChange={e => { setFilter(f => ({ ...f, action: e.target.value || undefined })); setPage(1); }}
+          className="px-3 py-2 bg-surface rounded-xl border-none text-sm">
+          <option value="">كل الإجراءات</option>
+          <option value="create">إضافة</option>
+          <option value="update">تعديل</option>
+          <option value="delete">حذف</option>
+          <option value="import">استيراد</option>
+        </select>
+      </div>
+
+      {loading ? <LoadingSpinner /> : (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          {logs.length === 0 ? (
+            <div className="p-8 text-center text-text-secondary">لا توجد سجلات</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {logs.map(log => (
+                <div key={log.id} className="px-4 py-3 flex items-start gap-3 hover:bg-surface/30 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${actionLabels[log.action]?.color || 'bg-gray-100 text-gray-600'}`}>
+                        {actionLabels[log.action]?.label || log.action}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-lg text-xs bg-gray-100 text-gray-600">{entityLabels[log.entity_type] || log.entity_type}</span>
+                      {log.entity_name && <span className="text-sm font-medium text-text">{log.entity_name}</span>}
+                    </div>
+                    {log.details && <p className="text-sm text-text-secondary m-0">{log.details}</p>}
+                    <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
+                      <span>{new Date(log.created_at).toLocaleString('ar-SA')}</span>
+                      {log.username && <span>بواسطة: {log.username}</span>}
+                    </div>
+                  </div>
+                  {canRevert(log.action) && (
+                    <div className="flex-shrink-0">
+                      {confirmRevert === log.id ? (
+                        <div className="flex gap-1">
+                          <button onClick={() => handleRevert(log.id)} disabled={reverting === log.id}
+                            className="px-3 py-1.5 bg-danger text-white rounded-lg text-xs font-medium cursor-pointer border-none disabled:opacity-50">
+                            {reverting === log.id ? '...' : 'تأكيد التراجع'}
+                          </button>
+                          <button onClick={() => setConfirmRevert(null)} className="px-2 py-1.5 bg-surface rounded-lg text-xs cursor-pointer border-none">إلغاء</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmRevert(log.id)}
+                          className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-medium cursor-pointer border-none hover:bg-amber-100 transition-colors">
+                          تراجع
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 p-4 border-t border-gray-100">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                className="px-3 py-1.5 bg-surface rounded-lg text-sm cursor-pointer border-none disabled:opacity-30">السابق</button>
+              <span className="text-sm text-text-secondary">صفحة {page} من {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                className="px-3 py-1.5 bg-surface rounded-lg text-sm cursor-pointer border-none disabled:opacity-30">التالي</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Allied Families Tab ─── */
+function AlliedFamiliesTab({ allMembers }: { allMembers: Member[] }) {
+  const [families, setFamilies] = useState<AlliedFamily[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newFamily, setNewFamily] = useState({ name: '', description: '' });
+  const [showAddMember, setShowAddMember] = useState<number | null>(null);
+  const [memberForm, setMemberForm] = useState({ name: '', gender: 'male', father_id: '', birth_date: '', city: '' });
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [linkMember, setLinkMember] = useState<{ familyId: number; memberId: string } | null>(null);
+
+  const loadFamilies = useCallback(async () => {
+    try { setFamilies(await getAlliedFamilies()); } catch { }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadFamilies(); }, [loadFamilies]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFamily.name) return;
+    try {
+      await createAlliedFamily(newFamily);
+      setNewFamily({ name: '', description: '' });
+      setShowCreate(false);
+      loadFamilies();
+    } catch { alert('خطأ في إنشاء العائلة'); }
+  };
+
+  const handleDelete = async (id: number) => {
+    try { await deleteAlliedFamily(id); setDeleteConfirm(null); loadFamilies(); } catch { alert('خطأ في الحذف'); }
+  };
+
+  const handleAddMember = async (e: React.FormEvent, familyId: number) => {
+    e.preventDefault();
+    if (!memberForm.name) return;
+    try {
+      await addFamilyMember(familyId, {
+        ...memberForm,
+        father_id: memberForm.father_id ? Number(memberForm.father_id) : null,
+      });
+      setMemberForm({ name: '', gender: 'male', father_id: '', birth_date: '', city: '' });
+      setShowAddMember(null);
+      loadFamilies();
+    } catch { alert('خطأ'); }
+  };
+
+  const handleLinkExisting = async (familyId: number, memberId: number) => {
+    try {
+      await updateMember(memberId, { family_id: familyId } as Partial<Member>);
+      setLinkMember(null);
+      loadFamilies();
+    } catch { alert('خطأ'); }
+  };
+
+  // Find marriage connections between a family's members and main tree
+  const getConnections = (familyId: number) => {
+    const familyMemberIds = new Set(allMembers.filter(m => m.family_id === familyId).map(m => m.id));
+    const connections: { allied: string; main: string; status: string }[] = [];
+
+    for (const m of allMembers) {
+      if (!m.marriages) continue;
+      for (const mar of m.marriages) {
+        const husbandInFamily = familyMemberIds.has(mar.husband_id);
+        const wifeInFamily = mar.wife_id ? familyMemberIds.has(mar.wife_id) : false;
+        if (husbandInFamily && !wifeInFamily) {
+          const husband = allMembers.find(x => x.id === mar.husband_id);
+          connections.push({ allied: husband?.name || '', main: mar.wife_name || '', status: mar.status });
+        } else if (wifeInFamily && !husbandInFamily) {
+          const wife = allMembers.find(x => x.id === mar.wife_id);
+          const husband = allMembers.find(x => x.id === mar.husband_id);
+          connections.push({ allied: wife?.name || '', main: husband?.name || '', status: mar.status });
+        }
+      }
+    }
+    return connections;
+  };
+
+  if (loading) return <LoadingSpinner />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-text-secondary">أضف عائلات حليفة وأربطها بشجرتك عن طريق الزواج أو القرابة</p>
+        <button onClick={() => setShowCreate(true)} className="px-5 py-2.5 bg-primary text-white rounded-xl font-medium text-sm cursor-pointer border-none flex items-center gap-2">
+          <span className="text-lg leading-none">+</span> عائلة جديدة
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-lg font-bold text-text mb-4">إنشاء عائلة حليفة</h3>
+          <form onSubmit={handleCreate} className="space-y-3">
+            <input value={newFamily.name} onChange={e => setNewFamily({ ...newFamily, name: e.target.value })}
+              placeholder="اسم العائلة *" required className="w-full px-4 py-3 bg-surface rounded-xl border-none text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            <input value={newFamily.description} onChange={e => setNewFamily({ ...newFamily, description: e.target.value })}
+              placeholder="وصف (اختياري)" className="w-full px-4 py-3 bg-surface rounded-xl border-none text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            <div className="flex gap-2">
+              <button type="submit" className="px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-medium cursor-pointer border-none">إنشاء</button>
+              <button type="button" onClick={() => setShowCreate(false)} className="px-6 py-2.5 bg-surface rounded-xl text-sm cursor-pointer border-none">إلغاء</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {families.length === 0 && !showCreate ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+          <div className="text-4xl mb-3">🤝</div>
+          <p className="text-text-secondary">لم يتم إضافة عائلات حليفة بعد</p>
+        </div>
+      ) : (
+        families.map(family => {
+          const familyMembers = allMembers.filter(m => m.family_id === family.id);
+          const connections = getConnections(family.id);
+
+          return (
+            <div key={family.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-text flex items-center gap-2">
+                    🏠 {family.name}
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-lg">{family.member_count || familyMembers.length} عضو</span>
+                  </h3>
+                  {family.description && <p className="text-sm text-text-secondary mt-1">{family.description}</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowAddMember(showAddMember === family.id ? null : family.id)}
+                    className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium cursor-pointer border-none">+ عضو جديد</button>
+                  <button onClick={() => setLinkMember(linkMember?.familyId === family.id ? null : { familyId: family.id, memberId: '' })}
+                    className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium cursor-pointer border-none">ربط عضو موجود</button>
+                  {deleteConfirm === family.id ? (
+                    <div className="flex gap-1">
+                      <button onClick={() => handleDelete(family.id)} className="px-2 py-1.5 bg-danger text-white rounded-lg text-xs cursor-pointer border-none">تأكيد</button>
+                      <button onClick={() => setDeleteConfirm(null)} className="px-2 py-1.5 bg-surface rounded-lg text-xs cursor-pointer border-none">إلغاء</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setDeleteConfirm(family.id)} className="px-3 py-1.5 bg-danger/10 text-danger rounded-lg text-xs cursor-pointer border-none">حذف</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Link existing member */}
+              {linkMember?.familyId === family.id && (
+                <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 flex gap-2 items-center">
+                  <select value={linkMember.memberId} onChange={e => setLinkMember({ ...linkMember, memberId: e.target.value })}
+                    className="flex-1 px-3 py-2 bg-white rounded-lg border-none text-sm">
+                    <option value="">اختر عضو لربطه...</option>
+                    {allMembers.filter(m => !m.family_id).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                  <button onClick={() => linkMember.memberId && handleLinkExisting(family.id, Number(linkMember.memberId))}
+                    disabled={!linkMember.memberId}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium cursor-pointer border-none disabled:opacity-40">ربط</button>
+                </div>
+              )}
+
+              {/* Add new member form */}
+              {showAddMember === family.id && (
+                <form onSubmit={e => handleAddMember(e, family.id)} className="px-6 py-3 bg-green-50 border-b border-green-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    <input value={memberForm.name} onChange={e => setMemberForm({ ...memberForm, name: e.target.value })}
+                      placeholder="الاسم *" required className="px-3 py-2 bg-white rounded-lg border-none text-sm" />
+                    <select value={memberForm.gender} onChange={e => setMemberForm({ ...memberForm, gender: e.target.value })}
+                      className="px-3 py-2 bg-white rounded-lg border-none text-sm">
+                      <option value="male">ذكر</option>
+                      <option value="female">أنثى</option>
+                    </select>
+                    <select value={memberForm.father_id} onChange={e => setMemberForm({ ...memberForm, father_id: e.target.value })}
+                      className="px-3 py-2 bg-white rounded-lg border-none text-sm">
+                      <option value="">بدون أب</option>
+                      {familyMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                    <input value={memberForm.city} onChange={e => setMemberForm({ ...memberForm, city: e.target.value })}
+                      placeholder="المدينة" className="px-3 py-2 bg-white rounded-lg border-none text-sm" />
+                    <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium cursor-pointer border-none">إضافة</button>
+                  </div>
+                </form>
+              )}
+
+              {/* Marriage connections */}
+              {connections.length > 0 && (
+                <div className="px-6 py-3 bg-pink-50/50 border-b border-pink-100">
+                  <p className="text-xs font-medium text-pink-700 mb-2">روابط الزواج مع شجرتنا:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {connections.map((c, i) => (
+                      <span key={i} className="px-2 py-1 bg-pink-100 text-pink-800 rounded-lg text-xs">
+                        {c.allied} ↔ {c.main} ({c.status === 'married' ? 'متزوج' : c.status === 'divorced' ? 'مطلق' : c.status})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Members table */}
+              {familyMembers.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-surface/50 border-b border-gray-100">
+                        <th className="px-4 py-2 text-start text-text-secondary font-medium text-xs">الاسم</th>
+                        <th className="px-4 py-2 text-start text-text-secondary font-medium text-xs">الجنس</th>
+                        <th className="px-4 py-2 text-start text-text-secondary font-medium text-xs">الجيل</th>
+                        <th className="px-4 py-2 text-start text-text-secondary font-medium text-xs">المدينة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {familyMembers.map(m => (
+                        <tr key={m.id} className="border-b border-gray-50">
+                          <td className="px-4 py-2 font-medium">{m.name}</td>
+                          <td className="px-4 py-2 text-text-secondary">{m.gender === 'female' ? 'أنثى' : 'ذكر'}</td>
+                          <td className="px-4 py-2 text-text-secondary">{m.generation}</td>
+                          <td className="px-4 py-2 text-text-secondary">{m.city || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 /* ─── Main Dashboard ─── */
 export default function AdminDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'members' | 'users' | 'excel' | 'gedcom'>('members');
+  const [tab, setTab] = useState<'members' | 'users' | 'excel' | 'gedcom' | 'families' | 'log'>('members');
   const [showForm, setShowForm] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | undefined>();
   const [search, setSearch] = useState('');
@@ -610,9 +970,11 @@ export default function AdminDashboard() {
   const filtered = members.filter(m => m.name.includes(search));
 
   const tabs = [
-    { key: 'members' as const, label: 'إدارة الأعضاء' },
-    { key: 'users' as const, label: 'إدارة المستخدمين' },
-    { key: 'excel' as const, label: 'استيراد Excel' },
+    { key: 'members' as const, label: 'الأعضاء' },
+    { key: 'users' as const, label: 'المستخدمين' },
+    { key: 'families' as const, label: 'عائلات حليفة' },
+    { key: 'log' as const, label: 'سجل التغييرات' },
+    { key: 'excel' as const, label: 'Excel' },
     { key: 'gedcom' as const, label: 'GEDCOM' },
   ];
 
@@ -735,6 +1097,10 @@ export default function AdminDashboard() {
       )}
 
       {tab === 'gedcom' && <GedcomTab onDone={loadMembers} />}
+
+      {tab === 'families' && <AlliedFamiliesTab allMembers={members} />}
+
+      {tab === 'log' && <ActivityLogTab />}
 
       <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditingMember(undefined); }}
         title={editingMember ? `تعديل: ${editingMember.name}` : 'إضافة عضو جديد'} size="lg">

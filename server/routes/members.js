@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db/database');
 const { authenticateToken } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { logActivity } = require('./activityLog');
 
 const router = express.Router();
 
@@ -398,6 +399,7 @@ router.post('/', authenticateToken, (req, res) => {
   `).run(name, father_id || null, gender || 'male', birth_date || null, death_date || null, bio || null, phone || null, mother_name || null, city || null, nationality || null, occupation || null, work_type || null, work_place || null, gen, photo || null, whatsapp || null, twitter || null, instagram || null, snapchat || null, tiktok || null);
 
   const newMember = db.prepare('SELECT * FROM members WHERE id = ?').get(result.lastInsertRowid);
+  logActivity('create', 'member', newMember.id, newMember.name, `إضافة عضو: ${newMember.name}`, null, JSON.stringify(newMember), req.user);
   res.status(201).json(newMember);
 });
 
@@ -461,6 +463,7 @@ router.put('/:id', authenticateToken, (req, res) => {
   );
 
   const updated = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);
+  logActivity('update', 'member', updated.id, updated.name, `تعديل عضو: ${updated.name}`, JSON.stringify(existing), JSON.stringify(updated), req.user);
   res.json(updated);
 });
 
@@ -477,6 +480,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
   db.prepare('DELETE FROM marriages WHERE husband_id = ? OR wife_id = ?').run(req.params.id, req.params.id);
   db.prepare('DELETE FROM members WHERE id = ?').run(req.params.id);
 
+  logActivity('delete', 'member', existing.id, existing.name, `حذف عضو: ${existing.name}`, JSON.stringify(existing), null, req.user);
   res.json({ message: 'تم حذف العضو بنجاح' });
 });
 
@@ -502,6 +506,7 @@ router.post('/:id/marriages', authenticateToken, (req, res) => {
   ).run(req.params.id, wife_id || null, wife_name || null, status || 'married', order);
 
   const marriage = db.prepare('SELECT * FROM marriages WHERE id = ?').get(result.lastInsertRowid);
+  logActivity('create', 'marriage', marriage.id, wife_name, `إضافة زواج: ${wife_name}`, null, JSON.stringify(marriage), req.user);
   res.status(201).json(marriage);
 });
 
@@ -521,7 +526,9 @@ router.put('/marriages/:id', authenticateToken, (req, res) => {
 
 router.delete('/marriages/:id', authenticateToken, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+  const existing = db.prepare('SELECT * FROM marriages WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM marriages WHERE id = ?').run(req.params.id);
+  if (existing) logActivity('delete', 'marriage', existing.id, existing.wife_name, `حذف زواج: ${existing.wife_name}`, JSON.stringify(existing), null, req.user);
   res.json({ message: 'تم الحذف' });
 });
 

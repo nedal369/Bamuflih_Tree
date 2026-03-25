@@ -9,6 +9,8 @@ const statsRoutes = require('./routes/stats');
 const uploadRoutes = require('./routes/upload');
 const gedcomRoutes = require('./routes/gedcom');
 const notificationRoutes = require('./routes/notifications');
+const activityLogRoutes = require('./routes/activityLog');
+const familyRoutes = require('./routes/families');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,6 +26,8 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/gedcom', gedcomRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/activity-log', activityLogRoutes);
+app.use('/api/families', familyRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {

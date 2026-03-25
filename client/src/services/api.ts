@@ -154,4 +154,32 @@ export const uploadMemberPhoto = (memberId: number, file: File) => {
   }).then(r => r.data);
 };
 
+// Activity Log
+export const getActivityLog = (params?: { page?: number; entity_type?: string; action?: string }) => {
+  const query = params ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString() : '';
+  return api.get(`/activity-log${query}`).then(r => r.data);
+};
+
+export const revertActivity = (id: number) =>
+  api.post(`/activity-log/${id}/revert`).then(r => r.data);
+
+// Allied Families
+export const getAlliedFamilies = () =>
+  api.get('/families').then(r => r.data);
+
+export const getAlliedFamily = (id: number) =>
+  api.get(`/families/${id}`).then(r => r.data);
+
+export const createAlliedFamily = (data: { name: string; description?: string }) =>
+  api.post('/families', data).then(r => r.data);
+
+export const updateAlliedFamily = (id: number, data: { name?: string; description?: string }) =>
+  api.put(`/families/${id}`, data).then(r => r.data);
+
+export const deleteAlliedFamily = (id: number) =>
+  api.delete(`/families/${id}`).then(r => r.data);
+
+export const addFamilyMember = (familyId: number, data: Record<string, unknown>) =>
+  api.post(`/families/${familyId}/members`, data).then(r => r.data);
+
 export default api;
