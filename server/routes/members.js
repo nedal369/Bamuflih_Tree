@@ -160,13 +160,15 @@ router.get('/relationship/:id1/:id2', (req, res) => {
   if (!person1) return res.status(404).json({ error: 'العضو الأول غير موجود' });
   if (!person2) return res.status(404).json({ error: 'العضو الثاني غير موجود' });
 
-  // Check marriage relationship
+  // Check direct marriage relationship
   const marriage = db.prepare(
     'SELECT * FROM marriages WHERE (husband_id = ? AND wife_id = ?) OR (husband_id = ? AND wife_id = ?)'
   ).get(id1, id2, id2, id1);
 
   if (marriage) {
-    const relationship = person1.gender === 'female' ? 'زوجة' : 'زوج';
+    // Determine who is the husband and who is the wife
+    const p1IsWife = marriage.husband_id === id2 && marriage.wife_id === id1;
+    const relationship = p1IsWife ? 'زوجة' : 'زوج';
     return res.json({
       person1: { id: person1.id, name: person1.name },
       person2: { id: person2.id, name: person2.name },
@@ -192,40 +194,6 @@ router.get('/relationship/:id1/:id2', (req, res) => {
     return chain;
   }
 
-  const chain1 = getAncestorChain(id1);
-  const chain2 = getAncestorChain(id2);
-
-  // Find Lowest Common Ancestor
-  const ancestors2Set = new Set(chain2.map(a => a.id));
-  let lca = null;
-  let g1 = -1;
-  for (let i = 0; i < chain1.length; i++) {
-    if (ancestors2Set.has(chain1[i].id)) {
-      lca = chain1[i];
-      g1 = i;
-      break;
-    }
-  }
-
-  if (!lca) {
-    return res.json({
-      person1: { id: person1.id, name: person1.name },
-      person2: { id: person2.id, name: person2.name },
-      relationship: 'لا توجد صلة قرابة مباشرة',
-      lca: null,
-      path: []
-    });
-  }
-
-  const g2 = chain2.findIndex(a => a.id === lca.id);
-
-  // Build path from person1 up to LCA then down to person2
-  const pathUp = chain1.slice(0, g1 + 1);
-  const pathDown = chain2.slice(0, g2).reverse();
-  const path = [...pathUp, ...pathDown];
-
-  const p1Gender = person1.gender;
-
   // Helper for great- prefixes
   function repeatPrefix(count, base) {
     if (count <= 0) return base;
@@ -236,93 +204,195 @@ router.get('/relationship/:id1/:id2', (req, res) => {
     return prefix + base;
   }
 
-  let relationship = '';
-
-  if (g1 === 0 && g2 === 1) {
-    // person1 is the parent of person2
-    relationship = p1Gender === 'female' ? 'أم' : 'أب';
-  } else if (g1 === 1 && g2 === 0) {
-    // person1 is the child of person2
-    relationship = p1Gender === 'female' ? 'ابنة' : 'ابن';
-  } else if (g1 === 0 && g2 > 1) {
-    // person1 is ancestor of person2 (grandparent+)
-    if (g2 === 2) {
-      relationship = p1Gender === 'female' ? 'جدة' : 'جد';
-    } else {
+  // Compute blood relationship label given distances g1, g2 and person1's gender
+  function computeRelationLabel(g1, g2, p1Gender) {
+    if (g1 === 0 && g2 === 1) {
+      return p1Gender === 'female' ? 'أم' : 'أب';
+    } else if (g1 === 1 && g2 === 0) {
+      return p1Gender === 'female' ? 'ابنة' : 'ابن';
+    } else if (g1 === 0 && g2 > 1) {
+      if (g2 === 2) {
+        return p1Gender === 'female' ? 'جدة' : 'جد';
+      }
       const greats = g2 - 2;
       const base = p1Gender === 'female' ? 'جدة' : 'جد';
-      relationship = repeatPrefix(greats, base);
-    }
-  } else if (g1 > 1 && g2 === 0) {
-    // person1 is descendant of person2 (grandchild+)
-    if (g1 === 2) {
-      relationship = p1Gender === 'female' ? 'حفيدة' : 'حفيد';
-    } else {
+      return repeatPrefix(greats, base);
+    } else if (g1 > 1 && g2 === 0) {
+      if (g1 === 2) {
+        return p1Gender === 'female' ? 'حفيدة' : 'حفيد';
+      }
       const levels = g1 - 2;
       const base = p1Gender === 'female' ? 'حفيدة' : 'حفيد';
       let prefix = '';
-      for (let i = 0; i < levels; i++) {
-        prefix += 'ابن ';
-      }
-      relationship = prefix + base;
-    }
-  } else if (g1 === 1 && g2 === 1) {
-    // Siblings
-    relationship = p1Gender === 'female' ? 'أخت' : 'أخ';
-  } else if (g1 === 1 && g2 === 2) {
-    // Uncle/Aunt (person1 is sibling of person2's parent)
-    relationship = p1Gender === 'female' ? 'عمة' : 'عم';
-  } else if (g1 === 2 && g2 === 1) {
-    // Nephew/Niece (person1 is child of person2's sibling)
-    relationship = p1Gender === 'female' ? 'ابنة أخ' : 'ابن أخ';
-  } else if (g1 === 1 && g2 > 2) {
-    // Great uncle/aunt
-    const greats = g2 - 2;
-    const base = p1Gender === 'female' ? 'عمة' : 'عم';
-    if (greats === 1) {
-      relationship = base + ' الأب';
-    } else {
-      relationship = base + ' ' + repeatPrefix(greats - 1, 'الأب').trim();
-    }
-  } else if (g1 > 2 && g2 === 1) {
-    // Great nephew/niece
-    const levels = g1 - 2;
-    const base = p1Gender === 'female' ? 'ابنة' : 'ابن';
-    if (levels === 1) {
-      relationship = base + ' ابن أخ';
-    } else {
+      for (let i = 0; i < levels; i++) prefix += 'ابن ';
+      return prefix + base;
+    } else if (g1 === 1 && g2 === 1) {
+      return p1Gender === 'female' ? 'أخت' : 'أخ';
+    } else if (g1 === 1 && g2 === 2) {
+      return p1Gender === 'female' ? 'عمة' : 'عم';
+    } else if (g1 === 2 && g2 === 1) {
+      return p1Gender === 'female' ? 'ابنة أخ' : 'ابن أخ';
+    } else if (g1 === 1 && g2 > 2) {
+      const greats = g2 - 2;
+      const base = p1Gender === 'female' ? 'عمة' : 'عم';
+      if (greats === 1) return base + ' الأب';
+      return base + ' ' + repeatPrefix(greats - 1, 'الأب').trim();
+    } else if (g1 > 2 && g2 === 1) {
+      const levels = g1 - 2;
+      const base = p1Gender === 'female' ? 'ابنة' : 'ابن';
+      if (levels === 1) return base + ' ابن أخ';
       let prefix = '';
-      for (let i = 0; i < levels - 1; i++) {
-        prefix += 'ابن ';
+      for (let i = 0; i < levels - 1; i++) prefix += 'ابن ';
+      return base + ' ' + prefix + 'ابن أخ';
+    } else if (g1 === g2 && g1 > 1) {
+      const degree = g1 - 1;
+      if (degree === 1) return p1Gender === 'female' ? 'بنت عم' : 'ابن عم';
+      return (p1Gender === 'female' ? 'بنت عم' : 'ابن عم') + ' درجة ' + degree;
+    } else {
+      const minG = Math.min(g1, g2);
+      const removal = Math.abs(g1 - g2);
+      if (minG === 1) {
+        return 'قريب بدرجة ' + g1 + '/' + g2 + ' من الجد المشترك';
       }
-      relationship = base + ' ' + prefix + 'ابن أخ';
-    }
-  } else if (g1 === g2 && g1 > 1) {
-    // Cousins of same degree
-    const degree = g1 - 1;
-    if (degree === 1) {
-      relationship = p1Gender === 'female' ? 'بنت عم' : 'ابن عم';
-    } else {
-      relationship = (p1Gender === 'female' ? 'بنت عم' : 'ابن عم') + ' درجة ' + degree;
-    }
-  } else {
-    // General case: different levels from LCA
-    const minG = Math.min(g1, g2);
-    const removal = Math.abs(g1 - g2);
-    if (minG === 1) {
-      relationship = 'قريب بدرجة ' + g1 + '/' + g2 + ' من الجد المشترك';
-    } else {
       const cousinDegree = minG - 1;
-      relationship = 'ابن عم درجة ' + cousinDegree + ' مع فارق ' + removal + ' ' + (removal === 1 ? 'جيل' : 'أجيال');
+      return 'ابن عم درجة ' + cousinDegree + ' مع فارق ' + removal + ' ' + (removal === 1 ? 'جيل' : 'أجيال');
     }
   }
 
-  res.json({
+  // Find blood relation between two members, returning {lca, g1, g2, path} or null
+  function findBloodRelation(fromId, toId) {
+    const chain1 = getAncestorChain(fromId);
+    const chain2 = getAncestorChain(toId);
+    const ancestors2Set = new Set(chain2.map(a => a.id));
+    let lca = null;
+    let g1 = -1;
+    for (let i = 0; i < chain1.length; i++) {
+      if (ancestors2Set.has(chain1[i].id)) {
+        lca = chain1[i];
+        g1 = i;
+        break;
+      }
+    }
+    if (!lca) return null;
+    const g2 = chain2.findIndex(a => a.id === lca.id);
+    const pathUp = chain1.slice(0, g1 + 1);
+    const pathDown = chain2.slice(0, g2).reverse();
+    return { lca, g1, g2, path: [...pathUp, ...pathDown] };
+  }
+
+  const bloodRel = findBloodRelation(id1, id2);
+
+  if (bloodRel) {
+    const relationship = computeRelationLabel(bloodRel.g1, bloodRel.g2, person1.gender);
+    return res.json({
+      person1: { id: person1.id, name: person1.name },
+      person2: { id: person2.id, name: person2.name },
+      relationship,
+      lca: { id: bloodRel.lca.id, name: bloodRel.lca.name },
+      path: bloodRel.path
+    });
+  }
+
+  // No direct blood relation found - check marriage-based relations
+  // Map blood relation label of husband to wife relation label seen from person1
+  function mapToWifeRelation(husbandRelLabel) {
+    const map = {
+      'أب': 'أم',
+      'جد': 'جدة الزوج',
+      'عم': 'مرت العم',
+      'أخ': 'زوجة الأخ',
+      'ابن': 'زوجة الابن',
+      'ابن أخ': 'زوجة ابن الأخ',
+      'بنت عم': null, // shouldn't apply
+      'ابن عم': 'زوجة ابن العم',
+      'عمة': null,
+    };
+    if (map[husbandRelLabel] !== undefined) return map[husbandRelLabel];
+    if (husbandRelLabel && husbandRelLabel.startsWith('عم ')) return 'زوجة ' + husbandRelLabel;
+    if (husbandRelLabel && husbandRelLabel.startsWith('ابن عم')) return 'زوجة ' + husbandRelLabel;
+    if (husbandRelLabel) return 'زوجة ' + husbandRelLabel;
+    return null;
+  }
+
+  // Map blood relation label of wife's husband to how person1 relates to the husband
+  // and derive person1's relation to the wife
+  function mapToHusbandWifeRelation(p1RelToHusband) {
+    const map = {
+      'ابن': 'أم',          // husband is p1's son → wife is p1's زوجة الابن
+      'أب': 'أم',           // husband is p1's father → wife is p1's أم / زوجة الأب
+      'أخ': 'زوجة أخيك',
+      'عم': 'مرت عمك',
+      'ابن أخ': 'زوجة ابن أخيك',
+      'ابن عم': 'زوجة ابن عمك',
+    };
+    if (map[p1RelToHusband] !== undefined) return map[p1RelToHusband];
+    if (p1RelToHusband && p1RelToHusband.startsWith('عم ')) return 'زوجة ' + p1RelToHusband;
+    if (p1RelToHusband && p1RelToHusband.startsWith('ابن عم')) return 'زوجة ' + p1RelToHusband;
+    if (p1RelToHusband) return 'زوجة ' + p1RelToHusband;
+    return null;
+  }
+
+  // Case A: person2 is a wife of someone related by blood to person1
+  const p2AsWife = db.prepare('SELECT husband_id FROM marriages WHERE wife_id = ?').all(id2);
+  for (const { husband_id } of p2AsWife) {
+    if (husband_id === id1) continue; // direct marriage already checked
+    const rel = findBloodRelation(id1, husband_id);
+    if (rel) {
+      const husbandLabel = computeRelationLabel(rel.g1, rel.g2, 'male');
+      const wifeRelation = mapToWifeRelation(husbandLabel);
+      if (wifeRelation) {
+        const husband = memberMap.get(husband_id);
+        return res.json({
+          person1: { id: person1.id, name: person1.name },
+          person2: { id: person2.id, name: person2.name },
+          relationship: wifeRelation,
+          lca: { id: rel.lca.id, name: rel.lca.name },
+          path: rel.path,
+          via: husband ? husband.name : null
+        });
+      }
+    }
+  }
+
+  // Case B: person1 is a wife of someone related by blood to person2
+  const p1AsWife = db.prepare('SELECT husband_id FROM marriages WHERE wife_id = ?').all(id1);
+  for (const { husband_id } of p1AsWife) {
+    if (husband_id === id2) continue; // direct marriage already checked
+    const rel = findBloodRelation(id2, husband_id);
+    if (rel) {
+      // person1 is the wife of husband, and husband is related to person2 by rel
+      // so from person1's point of view: person2 is [blood-relation of husband]
+      const p2RelToHusband = computeRelationLabel(rel.g1, rel.g2, 'male');
+      // person1 is "زوجة [p2RelToHusband]" of person2
+      // e.g. husband is person2's عم → person1 is "زوجة العم" → person2 sees person1 as "مرت العم"
+      const reverseMap = {
+        'أب': 'مرت عمك / زوجة الابن',
+        'ابن': 'زوجة الابن',
+        'أخ': 'زوجة الأخ',
+        'عم': 'مرت العم',
+        'ابن أخ': 'زوجة ابن الأخ',
+        'ابن عم': 'زوجة ابن العم',
+      };
+      let relationship = reverseMap[p2RelToHusband];
+      if (!relationship) relationship = 'زوجة ' + p2RelToHusband;
+      const husband = memberMap.get(husband_id);
+      return res.json({
+        person1: { id: person1.id, name: person1.name },
+        person2: { id: person2.id, name: person2.name },
+        relationship,
+        lca: { id: rel.lca.id, name: rel.lca.name },
+        path: rel.path,
+        via: husband ? husband.name : null
+      });
+    }
+  }
+
+  return res.json({
     person1: { id: person1.id, name: person1.name },
     person2: { id: person2.id, name: person2.name },
-    relationship,
-    lca: { id: lca.id, name: lca.name },
-    path
+    relationship: 'لا توجد صلة قرابة مباشرة',
+    lca: null,
+    path: []
   });
 });
 

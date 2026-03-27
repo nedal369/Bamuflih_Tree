@@ -80,6 +80,43 @@ db.exec(`
     description TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS fund_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    amount REAL NOT NULL,
+    member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+    description TEXT,
+    date TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS fund_loans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    amount REAL NOT NULL,
+    purpose TEXT,
+    status TEXT DEFAULT 'pending',
+    requested_date TEXT,
+    approved_date TEXT,
+    due_date TEXT,
+    amount_repaid REAL DEFAULT 0,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS fund_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    paid_date TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(member_id, year, month)
+  );
 `);
 
 // Add columns if they don't exist (for existing databases)
