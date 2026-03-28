@@ -203,31 +203,30 @@ function MemberForm({ member, allMembers, onSave, onCancel }: {
           <label className="block text-sm font-medium text-text mb-1">المدينة</label>
           <input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="مكة، جدة، المدينة..." />
         </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">الجنسية</label>
           <input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="سعودي، يمني..." />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-text mb-1">العمل</label>
-          <input value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
-        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-text mb-1">نوع العمل</label>
-          <select value={form.work_type} onChange={e => setForm({ ...form, work_type: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
-            <option value="">غير محدد</option>
-            <option value="حكومي">حكومي</option>
-            <option value="خاص">خاص</option>
-            <option value="عسكري">عسكري</option>
-            <option value="حر">عمل حر</option>
-          </select>
+          <label className="block text-sm font-medium text-text mb-1">العمل</label>
+          <input value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" />
         </div>
         <div>
           <label className="block text-sm font-medium text-text mb-1">جهة العمل</label>
           <input value={form.work_place} onChange={e => setForm({ ...form, work_place: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm" placeholder="اسم الجهة أو الشركة" />
         </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-text mb-1">نوع العمل</label>
+        <select value={form.work_type} onChange={e => setForm({ ...form, work_type: e.target.value })} className="w-full px-4 py-3 bg-surface rounded-xl border-none text-text focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm">
+          <option value="">غير محدد</option>
+          <option value="حكومي">حكومي</option>
+          <option value="خاص">خاص</option>
+          <option value="عسكري">عسكري</option>
+          <option value="حر">عمل حر</option>
+        </select>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
