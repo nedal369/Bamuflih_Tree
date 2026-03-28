@@ -117,6 +117,37 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(member_id, year, month)
   );
+
+  CREATE TABLE IF NOT EXISTS fund_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    date TEXT,
+    description TEXT,
+    adult_cost REAL DEFAULT 0,
+    child_age_max INTEGER DEFAULT 6,
+    young_age_max INTEGER DEFAULT 15,
+    young_cost_multiplier REAL DEFAULT 0.5,
+    child_cost_multiplier REAL DEFAULT 0,
+    exempt_non_bamuflih_spouses INTEGER DEFAULT 1,
+    exempt_their_children INTEGER DEFAULT 1,
+    custom_rules TEXT DEFAULT '[]',
+    notes TEXT,
+    status TEXT DEFAULT 'planning',
+    created_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS fund_event_attendees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES fund_events(id) ON DELETE CASCADE,
+    member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+    guest_name TEXT,
+    category TEXT DEFAULT 'adult',
+    cost_override REAL,
+    free_reason TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Add columns if they don't exist (for existing databases)
@@ -143,6 +174,7 @@ if (!userCols.includes('member_id')) db.exec('ALTER TABLE users ADD COLUMN membe
 if (!userCols.includes('status')) db.exec('ALTER TABLE users ADD COLUMN status TEXT DEFAULT \'pending\'');
 if (!userCols.includes('permission_type')) db.exec("ALTER TABLE users ADD COLUMN permission_type TEXT DEFAULT 'own_subtree'");
 if (!userCols.includes('allowed_subtrees')) db.exec('ALTER TABLE users ADD COLUMN allowed_subtrees TEXT');
+if (!userCols.includes('is_fund_subscriber')) db.exec('ALTER TABLE users ADD COLUMN is_fund_subscriber INTEGER DEFAULT 0');
 
 // Create marriages table index
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_husband ON marriages(husband_id)');

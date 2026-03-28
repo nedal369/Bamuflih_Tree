@@ -52,7 +52,8 @@ router.post('/login', (req, res) => {
       id: user.id, username: user.username, full_name: user.full_name, role: user.role,
       member_id: user.member_id, status: user.status,
       permission_type: user.permission_type || 'own_subtree',
-      allowed_subtrees: user.allowed_subtrees ? JSON.parse(user.allowed_subtrees) : []
+      allowed_subtrees: user.allowed_subtrees ? JSON.parse(user.allowed_subtrees) : [],
+      is_fund_subscriber: !!user.is_fund_subscriber
     }
   });
 });
@@ -88,12 +89,20 @@ router.get('/me', authenticateToken, (req, res) => {
 // Admin: list all users
 router.get('/users', authenticateToken, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-  const users = db.prepare('SELECT id, username, full_name, role, member_id, status, permission_type, allowed_subtrees, created_at FROM users ORDER BY created_at DESC').all();
-  // Parse allowed_subtrees JSON
+  const users = db.prepare('SELECT id, username, full_name, role, member_id, status, permission_type, allowed_subtrees, is_fund_subscriber, created_at FROM users ORDER BY created_at DESC').all();
   res.json(users.map(u => ({
     ...u,
-    allowed_subtrees: u.allowed_subtrees ? JSON.parse(u.allowed_subtrees) : []
+    allowed_subtrees: u.allowed_subtrees ? JSON.parse(u.allowed_subtrees) : [],
+    is_fund_subscriber: !!u.is_fund_subscriber
   })));
+});
+
+// Admin: toggle fund subscriber status
+router.put('/users/:id/fund-subscriber', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+  const { is_fund_subscriber } = req.body;
+  db.prepare('UPDATE users SET is_fund_subscriber = ? WHERE id = ?').run(is_fund_subscriber ? 1 : 0, req.params.id);
+  res.json({ message: 'تم التحديث', is_fund_subscriber: !!is_fund_subscriber });
 });
 
 // Admin: create user directly

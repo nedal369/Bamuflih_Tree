@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   getMembers, createMember, updateMember, deleteMember,
   uploadExcel, importExcelData, downloadExcel, getUsers, createUser, updateUserStatus, deleteUser,
+  toggleFundSubscriber,
   addMarriage, deleteMarriage, downloadGedcom, importGedcom,
   getActivityLog, revertActivity,
   getAlliedFamilies, createAlliedFamily, deleteAlliedFamily, addFamilyMember,
@@ -527,6 +528,11 @@ function UsersTab({ members }: { members: Member[] }) {
     loadUsers();
   };
 
+  const handleToggleFundSubscriber = async (userId: number, current: boolean) => {
+    await toggleFundSubscriber(userId, !current);
+    loadUsers();
+  };
+
   const statusColors: Record<string, string> = {
     pending: 'bg-warning/10 text-warning',
     approved: 'bg-success/10 text-success',
@@ -565,6 +571,7 @@ function UsersTab({ members }: { members: Member[] }) {
                 <th className="px-4 py-3 text-start font-medium text-text-secondary">الحالة</th>
                 <th className="px-4 py-3 text-start font-medium text-text-secondary">العضو المرتبط</th>
                 <th className="px-4 py-3 text-start font-medium text-text-secondary hidden lg:table-cell">الصلاحيات</th>
+                <th className="px-4 py-3 text-center font-medium text-text-secondary">الصندوق</th>
                 <th className="px-4 py-3 text-start font-medium text-text-secondary">إجراءات</th>
               </tr>
             </thead>
@@ -629,6 +636,17 @@ function UsersTab({ members }: { members: Member[] }) {
                         )}
                       </div>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {u.role !== 'admin' ? (
+                      <button
+                        onClick={() => handleToggleFundSubscriber(u.id, !!u.is_fund_subscriber)}
+                        title={u.is_fund_subscriber ? 'إلغاء اشتراك الصندوق' : 'تفعيل اشتراك الصندوق'}
+                        className={`w-10 h-6 rounded-full transition-colors cursor-pointer border-none relative ${u.is_fund_subscriber ? 'bg-green-500' : 'bg-gray-200'}`}
+                      >
+                        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${u.is_fund_subscriber ? 'right-0.5' : 'left-0.5'}`} />
+                      </button>
+                    ) : <span className="text-xs text-primary">✓</span>}
                   </td>
                   <td className="px-4 py-3">
                     {u.role !== 'admin' && (

@@ -99,6 +99,7 @@ export interface User {
   status: 'approved' | 'pending' | 'rejected';
   permission_type: 'full_tree' | 'own_subtree' | 'custom_subtrees';
   allowed_subtrees: number[];
+  is_fund_subscriber?: boolean;
 }
 
 export interface AuthResponse {

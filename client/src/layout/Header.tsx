@@ -50,10 +50,16 @@ export default function Header() {
                   }`}>{item.label}</Link>
               ))}
               {isAdmin && (
-                <Link to="/admin/dashboard"
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium no-underline transition-colors ${
-                    location.pathname.startsWith('/admin') ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:text-text hover:bg-surface'
-                  }`}>لوحة التحكم</Link>
+                <>
+                  <Link to="/admin/dashboard"
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium no-underline transition-colors ${
+                      location.pathname === '/admin/dashboard' ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:text-text hover:bg-surface'
+                    }`}>لوحة التحكم</Link>
+                  <Link to="/admin/event-calculator"
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium no-underline transition-colors ${
+                      location.pathname === '/admin/event-calculator' ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:text-text hover:bg-surface'
+                    }`}>حاسبة المناسبات</Link>
+                </>
               )}
               <div className="w-px h-5 bg-gray-200 mx-2" />
               <span className="text-xs text-text-secondary">{user?.full_name || user?.username}</span>
@@ -76,11 +82,18 @@ export default function Header() {
           {menuOpen && (
             <nav className="md:hidden pb-3 flex flex-col gap-1 border-t border-gray-100 pt-2">
               {isAdmin && (
-                <Link to="/admin/dashboard" onClick={() => setMenuOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium no-underline ${location.pathname.startsWith('/admin') ? 'bg-primary/10 text-primary' : 'text-text-secondary'}`}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                  لوحة التحكم
-                </Link>
+                <>
+                  <Link to="/admin/dashboard" onClick={() => setMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium no-underline ${location.pathname === '/admin/dashboard' ? 'bg-primary/10 text-primary' : 'text-text-secondary'}`}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    لوحة التحكم
+                  </Link>
+                  <Link to="/admin/event-calculator" onClick={() => setMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium no-underline ${location.pathname === '/admin/event-calculator' ? 'bg-primary/10 text-primary' : 'text-text-secondary'}`}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="15" x2="10" y2="15"/><line x1="12" y1="15" x2="14" y2="15"/><line x1="16" y1="15" x2="18" y2="15"/></svg>
+                    حاسبة المناسبات
+                  </Link>
+                </>
               )}
               <button onClick={() => { logout(); setMenuOpen(false); }}
                 className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-danger text-start cursor-pointer bg-transparent border-none">

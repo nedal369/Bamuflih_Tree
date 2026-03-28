@@ -10,6 +10,7 @@ import SearchPage from './pages/SearchPage';
 import RelationshipPage from './pages/RelationshipPage';
 import NotificationsPage from './pages/NotificationsPage';
 import FundPage from './pages/FundPage';
+import EventCalculatorPage from './pages/EventCalculatorPage';
 import type { ReactNode } from 'react';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/fund" element={<FundPage />} />
             <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
+            <Route path="/admin/event-calculator" element={<RequireAdmin><EventCalculatorPage /></RequireAdmin>} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

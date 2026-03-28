@@ -81,7 +81,26 @@ function formatAmount(n: number) {
 }
 
 export default function FundPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
+  const isFundSubscriber = isAdmin || !!user?.is_fund_subscriber;
+
+  if (!isFundSubscriber) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-20 text-center" dir="rtl">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-text mb-2">الوصول محدود</h2>
+          <p className="text-text-secondary text-sm">صفحة صندوق الأسرة متاحة فقط للمشتركين المعتمدين.</p>
+          <p className="text-text-secondary text-sm mt-2">تواصل مع الإدارة لتفعيل اشتراكك.</p>
+        </div>
+      </div>
+    );
+  }
   const [summary, setSummary] = useState<FundSummary | null>(null);
   const [transactions, setTransactions] = useState<FundTransaction[]>([]);
   const [loans, setLoans] = useState<FundLoan[]>([]);

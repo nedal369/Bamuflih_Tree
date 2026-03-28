@@ -42,6 +42,9 @@ export const updateUserStatus = (id: number, data: { status?: string; role?: str
 export const deleteUser = (id: number) =>
   api.delete(`/auth/users/${id}`).then(r => r.data);
 
+export const toggleFundSubscriber = (id: number, value: boolean) =>
+  api.put(`/auth/users/${id}/fund-subscriber`, { is_fund_subscriber: value }).then(r => r.data);
+
 // Members
 export const getMembers = () =>
   api.get<Member[]>('/members').then(r => r.data);
