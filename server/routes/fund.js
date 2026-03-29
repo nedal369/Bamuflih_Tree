@@ -222,6 +222,104 @@ router.get('/members-status', (req, res) => {
   res.json({ year, month, members });
 });
 
+// ─── FAMILY HEADS ───
+
+// GET /api/fund/family-heads - Get all family heads with subscriber status and family composition
+router.get('/family-heads', (req, res) => {
+  const { child_age_max = 6, young_age_max = 15 } = req.query;
+
+  // Family heads = living males who have at least one child
+  const heads = db.prepare(`
+    SELECT m.id, m.name, m.birth_date, m.gender, m.generation,
+      COALESCE(u.is_fund_subscriber, 0) as is_fund_subscriber
+    FROM members m
+    LEFT JOIN users u ON u.member_id = m.id AND u.status = 'approved'
+    WHERE m.gender = 'male'
+      AND m.death_date IS NULL
+      AND EXISTS (SELECT 1 FROM members c WHERE c.father_id = m.id)
+    ORDER BY m.generation, m.name
+  `).all();
+
+  const today = new Date();
+
+  const result = heads.map(head => {
+    // Get wives (active marriages)
+    const wives = db.prepare(`
+      SELECT mar.wife_id, mar.wife_name, mar.status as marriage_status,
+        w.name as wife_member_name, w.birth_date as wife_birth_date, w.death_date as wife_death_date
+      FROM marriages mar
+      LEFT JOIN members w ON mar.wife_id = w.id
+      WHERE mar.husband_id = ? AND mar.status IN ('married')
+    `).all(head.id);
+
+    // Get living children
+    const children = db.prepare(`
+      SELECT id, name, birth_date, gender FROM members
+      WHERE father_id = ? AND death_date IS NULL
+    `).all(head.id);
+
+    // Categorize family members by age
+    const categorize = (birthDate) => {
+      if (!birthDate) return 'adult';
+      const birth = new Date(birthDate);
+      const age = Math.floor((today - birth) / (365.25 * 24 * 60 * 60 * 1000));
+      if (age <= parseInt(child_age_max)) return 'child';
+      if (age <= parseInt(young_age_max)) return 'young';
+      return 'adult';
+    };
+
+    // Build family members list
+    const familyMembers = [];
+
+    // Head himself
+    familyMembers.push({
+      id: head.id, name: head.name, relationship: 'head',
+      category: categorize(head.birth_date)
+    });
+
+    // Wives
+    for (const w of wives) {
+      if (w.wife_id && !w.wife_death_date) {
+        familyMembers.push({
+          id: w.wife_id, name: w.wife_member_name || w.wife_name,
+          relationship: 'wife', category: categorize(w.wife_birth_date)
+        });
+      } else if (!w.wife_id && w.wife_name) {
+        familyMembers.push({
+          id: null, name: w.wife_name,
+          relationship: 'wife', category: 'adult'
+        });
+      }
+    }
+
+    // Children
+    for (const c of children) {
+      familyMembers.push({
+        id: c.id, name: c.name, relationship: 'child',
+        category: categorize(c.birth_date)
+      });
+    }
+
+    const adultCount = familyMembers.filter(m => m.category === 'adult').length;
+    const youngCount = familyMembers.filter(m => m.category === 'young').length;
+    const childCount = familyMembers.filter(m => m.category === 'child').length;
+
+    return {
+      id: head.id,
+      name: head.name,
+      generation: head.generation,
+      is_fund_subscriber: !!head.is_fund_subscriber,
+      family_members: familyMembers,
+      adult_count: adultCount,
+      young_count: youngCount,
+      child_count: childCount,
+      total_members: familyMembers.length,
+    };
+  });
+
+  res.json(result);
+});
+
 // ─── EVENTS (Event Cost Calculator) ───
 
 // Helper: categorize attendee based on event rules
@@ -305,7 +403,8 @@ router.get('/events', (req, res) => {
 
   res.json(events.map(e => ({
     ...e,
-    custom_rules: e.custom_rules ? JSON.parse(e.custom_rules) : []
+    custom_rules: e.custom_rules ? JSON.parse(e.custom_rules) : [],
+    subscriber_exemptions: e.subscriber_exemptions ? JSON.parse(e.subscriber_exemptions) : [],
   })));
 });
 
@@ -315,6 +414,16 @@ router.get('/events/:id', (req, res) => {
   if (!event) return res.status(404).json({ error: 'الفعالية غير موجودة' });
 
   event.custom_rules = event.custom_rules ? JSON.parse(event.custom_rules) : [];
+  event.subscriber_exemptions = event.subscriber_exemptions ? JSON.parse(event.subscriber_exemptions) : [];
+
+  // Load family-based data
+  const families = db.prepare(`
+    SELECT fef.*, m.name as head_name
+    FROM fund_event_families fef
+    JOIN members m ON fef.head_member_id = m.id
+    WHERE fef.event_id = ?
+    ORDER BY m.name
+  `).all(req.params.id);
 
   const attendees = db.prepare(`
     SELECT fea.*, m.name as member_name, m.birth_date, m.gender, m.family_id, m.father_id, m.death_date
@@ -356,8 +465,33 @@ router.get('/events/:id', (req, res) => {
   });
 
   const total = enrichedAttendees.reduce((sum, a) => sum + (a.final_cost || 0), 0);
+  const familyTotal = families.reduce((sum, f) => sum + (f.total_cost || 0), 0);
 
-  res.json({ ...event, attendees: enrichedAttendees, total_cost: total });
+  // Calculate rates for display
+  const costItems = { dinner: event.dinner_cost || 0, venue: event.venue_cost || 0, hospitality: event.hospitality_cost || 0, other: event.other_cost || 0 };
+  const exemptions = event.subscriber_exemptions || [];
+  const totalPerPerson = Object.values(costItems).reduce((s, v) => s + v, 0);
+  const subscriberExemptAmount = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
+  const subscriberAdultRate = totalPerPerson - subscriberExemptAmount;
+  const nonSubscriberAdultRate = totalPerPerson + (event.non_subscriber_surcharge || 0);
+  const youngMultiplier = event.young_cost_multiplier || 0.5;
+  const childMultiplier = event.child_cost_multiplier || 0;
+
+  res.json({
+    ...event,
+    attendees: enrichedAttendees,
+    total_cost: total,
+    families,
+    family_total_cost: familyTotal,
+    rates: {
+      subscriber_adult: subscriberAdultRate,
+      non_subscriber_adult: nonSubscriberAdultRate,
+      subscriber_young: subscriberAdultRate * youngMultiplier,
+      non_subscriber_young: nonSubscriberAdultRate * youngMultiplier,
+      subscriber_child: subscriberAdultRate * childMultiplier,
+      non_subscriber_child: nonSubscriberAdultRate * childMultiplier,
+    }
+  });
 });
 
 // POST /api/fund/events - Create event
@@ -369,7 +503,9 @@ router.post('/events', authenticateToken, (req, res) => {
     child_age_max = 6, young_age_max = 15,
     young_cost_multiplier = 0.5, child_cost_multiplier = 0,
     exempt_non_bamuflih_spouses = 1, exempt_their_children = 1,
-    custom_rules = [], notes, status = 'planning'
+    custom_rules = [], notes, status = 'planning',
+    dinner_cost = 0, venue_cost = 0, hospitality_cost = 0, other_cost = 0,
+    subscriber_exemptions = [], non_subscriber_surcharge = 0
   } = req.body;
 
   if (!name) return res.status(400).json({ error: 'اسم الفعالية مطلوب' });
@@ -377,11 +513,14 @@ router.post('/events', authenticateToken, (req, res) => {
   const result = db.prepare(`
     INSERT INTO fund_events (name, date, description, adult_cost, child_age_max, young_age_max,
       young_cost_multiplier, child_cost_multiplier, exempt_non_bamuflih_spouses,
-      exempt_their_children, custom_rules, notes, status, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      exempt_their_children, custom_rules, notes, status, created_by,
+      dinner_cost, venue_cost, hospitality_cost, other_cost, subscriber_exemptions, non_subscriber_surcharge)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(name, date || null, description || null, adult_cost, child_age_max, young_age_max,
     young_cost_multiplier, child_cost_multiplier, exempt_non_bamuflih_spouses ? 1 : 0,
-    exempt_their_children ? 1 : 0, JSON.stringify(custom_rules), notes || null, status, req.user.id);
+    exempt_their_children ? 1 : 0, JSON.stringify(custom_rules), notes || null, status, req.user.id,
+    dinner_cost, venue_cost, hospitality_cost, other_cost,
+    JSON.stringify(subscriber_exemptions), non_subscriber_surcharge);
 
   res.status(201).json({ id: result.lastInsertRowid, message: 'تم إنشاء الفعالية' });
 });
@@ -395,12 +534,15 @@ router.put('/events/:id', authenticateToken, (req, res) => {
 
   const fields = ['name','date','description','adult_cost','child_age_max','young_age_max',
     'young_cost_multiplier','child_cost_multiplier','exempt_non_bamuflih_spouses',
-    'exempt_their_children','custom_rules','notes','status'];
+    'exempt_their_children','custom_rules','notes','status',
+    'dinner_cost','venue_cost','hospitality_cost','other_cost',
+    'subscriber_exemptions','non_subscriber_surcharge'];
 
+  const jsonFields = ['custom_rules', 'subscriber_exemptions'];
   const updates = {};
   for (const f of fields) {
     if (req.body[f] !== undefined) {
-      updates[f] = f === 'custom_rules' ? JSON.stringify(req.body[f]) : req.body[f];
+      updates[f] = jsonFields.includes(f) ? JSON.stringify(req.body[f]) : req.body[f];
     }
   }
 
@@ -496,6 +638,184 @@ router.post('/events/:id/calculate', authenticateToken, (req, res) => {
 
   const count = db.prepare('SELECT COUNT(*) as c FROM fund_event_attendees WHERE event_id = ?').get(event.id).c;
   res.json({ message: `تم حساب تكلفة ${count} عضو`, count });
+});
+
+// POST /api/fund/events/:id/calculate-families - Calculate costs for selected family heads
+router.post('/events/:id/calculate-families', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+
+  const event = db.prepare('SELECT * FROM fund_events WHERE id = ?').get(req.params.id);
+  if (!event) return res.status(404).json({ error: 'الفعالية غير موجودة' });
+
+  const { family_head_ids } = req.body;
+  if (!family_head_ids || !Array.isArray(family_head_ids) || family_head_ids.length === 0) {
+    return res.status(400).json({ error: 'يرجى اختيار أرباب أسر' });
+  }
+
+  // Cost calculation
+  const costItems = {
+    dinner: event.dinner_cost || 0,
+    venue: event.venue_cost || 0,
+    hospitality: event.hospitality_cost || 0,
+    other: event.other_cost || 0,
+  };
+  const exemptions = event.subscriber_exemptions ? JSON.parse(event.subscriber_exemptions) : [];
+  const totalPerPerson = Object.values(costItems).reduce((s, v) => s + v, 0);
+  const subscriberExemptAmount = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
+  const subscriberAdultRate = totalPerPerson - subscriberExemptAmount;
+  const nonSubscriberAdultRate = totalPerPerson + (event.non_subscriber_surcharge || 0);
+  const youngMultiplier = event.young_cost_multiplier || 0.5;
+  const childMultiplier = event.child_cost_multiplier || 0;
+
+  const today = new Date();
+  const childAgeMax = event.child_age_max || 6;
+  const youngAgeMax = event.young_age_max || 15;
+
+  const categorizeByAge = (birthDate) => {
+    if (!birthDate) return 'adult';
+    const birth = new Date(birthDate);
+    const age = Math.floor((today - birth) / (365.25 * 24 * 60 * 60 * 1000));
+    if (age <= childAgeMax) return 'child';
+    if (age <= youngAgeMax) return 'young';
+    return 'adult';
+  };
+
+  // Clear existing families for this event
+  db.prepare('DELETE FROM fund_event_families WHERE event_id = ?').run(event.id);
+
+  const insert = db.prepare(`
+    INSERT INTO fund_event_families (event_id, head_member_id, is_subscriber, adult_count, young_count, child_count, total_cost)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertAll = db.transaction(() => {
+    for (const headId of family_head_ids) {
+      const head = db.prepare('SELECT * FROM members WHERE id = ?').get(headId);
+      if (!head || head.death_date) continue;
+
+      // Check subscriber status
+      const user = db.prepare("SELECT is_fund_subscriber FROM users WHERE member_id = ? AND status = 'approved'").get(headId);
+      const isSubscriber = user ? !!user.is_fund_subscriber : false;
+
+      // Gather family: head + wives + children
+      const familyMembers = [];
+      familyMembers.push({ category: categorizeByAge(head.birth_date) });
+
+      // Wives
+      const wives = db.prepare(`
+        SELECT w.birth_date, w.death_date, mar.wife_name, mar.wife_id
+        FROM marriages mar
+        LEFT JOIN members w ON mar.wife_id = w.id
+        WHERE mar.husband_id = ? AND mar.status = 'married'
+      `).all(headId);
+
+      for (const w of wives) {
+        if (w.wife_id && !w.death_date) {
+          familyMembers.push({ category: categorizeByAge(w.birth_date) });
+        } else if (!w.wife_id && w.wife_name) {
+          familyMembers.push({ category: 'adult' });
+        }
+      }
+
+      // Children
+      const children = db.prepare('SELECT birth_date FROM members WHERE father_id = ? AND death_date IS NULL').all(headId);
+      for (const c of children) {
+        familyMembers.push({ category: categorizeByAge(c.birth_date) });
+      }
+
+      const adultCount = familyMembers.filter(m => m.category === 'adult').length;
+      const youngCount = familyMembers.filter(m => m.category === 'young').length;
+      const childCount = familyMembers.filter(m => m.category === 'child').length;
+
+      const adultRate = isSubscriber ? subscriberAdultRate : nonSubscriberAdultRate;
+      const youngRate = adultRate * youngMultiplier;
+      const childRate = adultRate * childMultiplier;
+
+      const totalCost = (adultCount * adultRate) + (youngCount * youngRate) + (childCount * childRate);
+
+      insert.run(event.id, headId, isSubscriber ? 1 : 0, adultCount, youngCount, childCount, totalCost);
+    }
+  });
+  insertAll();
+
+  const count = db.prepare('SELECT COUNT(*) as c FROM fund_event_families WHERE event_id = ?').get(event.id).c;
+  res.json({ message: `تم حساب تكلفة ${count} عائلة`, count });
+});
+
+// GET /api/fund/events/:id/report - Get structured report data
+router.get('/events/:id/report', (req, res) => {
+  const event = db.prepare('SELECT * FROM fund_events WHERE id = ?').get(req.params.id);
+  if (!event) return res.status(404).json({ error: 'الفعالية غير موجودة' });
+
+  event.subscriber_exemptions = event.subscriber_exemptions ? JSON.parse(event.subscriber_exemptions) : [];
+
+  const families = db.prepare(`
+    SELECT fef.*, m.name as head_name
+    FROM fund_event_families fef
+    JOIN members m ON fef.head_member_id = m.id
+    WHERE fef.event_id = ?
+    ORDER BY m.name
+  `).all(req.params.id);
+
+  const costItems = {
+    dinner: event.dinner_cost || 0,
+    venue: event.venue_cost || 0,
+    hospitality: event.hospitality_cost || 0,
+    other: event.other_cost || 0,
+  };
+  const exemptions = event.subscriber_exemptions || [];
+  const totalPerPerson = Object.values(costItems).reduce((s, v) => s + v, 0);
+  const subscriberExemptAmount = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
+  const subscriberAdultRate = totalPerPerson - subscriberExemptAmount;
+  const nonSubscriberAdultRate = totalPerPerson + (event.non_subscriber_surcharge || 0);
+  const youngMultiplier = event.young_cost_multiplier || 0.5;
+  const childMultiplier = event.child_cost_multiplier || 0;
+
+  const totalFamilies = families.length;
+  const subscriberFamilies = families.filter(f => f.is_subscriber).length;
+  const nonSubscriberFamilies = totalFamilies - subscriberFamilies;
+  const grandTotal = families.reduce((s, f) => s + (f.total_cost || 0), 0);
+  const totalAdults = families.reduce((s, f) => s + f.adult_count, 0);
+  const totalYoung = families.reduce((s, f) => s + f.young_count, 0);
+  const totalChildren = families.reduce((s, f) => s + f.child_count, 0);
+
+  res.json({
+    event: {
+      name: event.name,
+      date: event.date,
+      description: event.description,
+    },
+    cost_breakdown: costItems,
+    subscriber_exemptions: exemptions,
+    non_subscriber_surcharge: event.non_subscriber_surcharge || 0,
+    rates: {
+      subscriber_adult: subscriberAdultRate,
+      non_subscriber_adult: nonSubscriberAdultRate,
+      subscriber_young: subscriberAdultRate * youngMultiplier,
+      non_subscriber_young: nonSubscriberAdultRate * youngMultiplier,
+      subscriber_child: subscriberAdultRate * childMultiplier,
+      non_subscriber_child: nonSubscriberAdultRate * childMultiplier,
+    },
+    summary: {
+      total_families: totalFamilies,
+      subscriber_families: subscriberFamilies,
+      non_subscriber_families: nonSubscriberFamilies,
+      total_adults: totalAdults,
+      total_young: totalYoung,
+      total_children: totalChildren,
+      total_people: totalAdults + totalYoung + totalChildren,
+      grand_total: grandTotal,
+    },
+    families: families.map(f => ({
+      head_name: f.head_name,
+      is_subscriber: !!f.is_subscriber,
+      adult_count: f.adult_count,
+      young_count: f.young_count,
+      child_count: f.child_count,
+      total_members: f.adult_count + f.young_count + f.child_count,
+      total_cost: f.total_cost,
+    })),
+  });
 });
 
 module.exports = router;

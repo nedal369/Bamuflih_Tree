@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage, RelationshipResult, SearchResult } from '../types';
+import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage, RelationshipResult, SearchResult, FamilyHead, EventReport } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -184,5 +184,20 @@ export const deleteAlliedFamily = (id: number) =>
 
 export const addFamilyMember = (familyId: number, data: Record<string, unknown>) =>
   api.post(`/families/${familyId}/members`, data).then(r => r.data);
+
+// Fund Family Heads & Calculator
+export const getFamilyHeads = (childAgeMax?: number, youngAgeMax?: number) => {
+  const params = new URLSearchParams();
+  if (childAgeMax !== undefined) params.set('child_age_max', String(childAgeMax));
+  if (youngAgeMax !== undefined) params.set('young_age_max', String(youngAgeMax));
+  const query = params.toString();
+  return api.get<FamilyHead[]>(`/fund/family-heads${query ? '?' + query : ''}`).then(r => r.data);
+};
+
+export const calculateFamilies = (eventId: number, familyHeadIds: number[]) =>
+  api.post(`/fund/events/${eventId}/calculate-families`, { family_head_ids: familyHeadIds }).then(r => r.data);
+
+export const getEventReport = (eventId: number) =>
+  api.get<EventReport>(`/fund/events/${eventId}/report`).then(r => r.data);
 
 export default api;
