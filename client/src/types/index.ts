@@ -141,6 +141,65 @@ export interface AlliedFamily {
   created_at: string;
 }
 
+export interface FamilyHead {
+  id: number;
+  name: string;
+  generation: number;
+  is_fund_subscriber: boolean;
+  family_members: FamilyMember[];
+  adult_count: number;
+  young_count: number;
+  child_count: number;
+  total_members: number;
+}
+
+export interface FamilyMember {
+  id: number | null;
+  name: string;
+  relationship: 'head' | 'wife' | 'child';
+  category: 'adult' | 'young' | 'child';
+}
+
+export interface EventFamily {
+  id?: number;
+  head_member_id?: number;
+  head_name: string;
+  is_subscriber: boolean;
+  adult_count: number;
+  young_count: number;
+  child_count: number;
+  total_members: number;
+  total_cost: number;
+}
+
+export interface EventRates {
+  subscriber_adult: number;
+  non_subscriber_adult: number;
+  subscriber_young: number;
+  non_subscriber_young: number;
+  subscriber_child: number;
+  non_subscriber_child: number;
+}
+
+export interface EventReport {
+  event: { name: string; date: string | null; description: string | null };
+  cost_breakdown: { dinner: number; venue: number; hospitality: number; other: number };
+  subscriber_exemptions: string[];
+  non_subscriber_surcharge: number;
+  rates: EventRates;
+  summary: {
+    total_families: number;
+    subscriber_families: number;
+    non_subscriber_families: number;
+    total_adults: number;
+    total_young: number;
+    total_children: number;
+    total_people: number;
+    grand_total: number;
+  };
+  families: EventFamily[];
+}
+
 export interface ExcelUploadResponse {
   message: string;
   data: Record<string, string>[];

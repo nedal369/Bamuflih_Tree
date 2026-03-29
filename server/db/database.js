@@ -176,6 +176,32 @@ if (!userCols.includes('permission_type')) db.exec("ALTER TABLE users ADD COLUMN
 if (!userCols.includes('allowed_subtrees')) db.exec('ALTER TABLE users ADD COLUMN allowed_subtrees TEXT');
 if (!userCols.includes('is_fund_subscriber')) db.exec('ALTER TABLE users ADD COLUMN is_fund_subscriber INTEGER DEFAULT 0');
 
+// Add itemized cost columns to fund_events
+const eventCols = db.prepare("PRAGMA table_info(fund_events)").all().map(c => c.name);
+if (!eventCols.includes('dinner_cost')) db.exec('ALTER TABLE fund_events ADD COLUMN dinner_cost REAL DEFAULT 0');
+if (!eventCols.includes('venue_cost')) db.exec('ALTER TABLE fund_events ADD COLUMN venue_cost REAL DEFAULT 0');
+if (!eventCols.includes('hospitality_cost')) db.exec('ALTER TABLE fund_events ADD COLUMN hospitality_cost REAL DEFAULT 0');
+if (!eventCols.includes('other_cost')) db.exec('ALTER TABLE fund_events ADD COLUMN other_cost REAL DEFAULT 0');
+if (!eventCols.includes('subscriber_exemptions')) db.exec("ALTER TABLE fund_events ADD COLUMN subscriber_exemptions TEXT DEFAULT '[]'");
+if (!eventCols.includes('non_subscriber_surcharge')) db.exec('ALTER TABLE fund_events ADD COLUMN non_subscriber_surcharge REAL DEFAULT 0');
+
+// Create fund_event_families table for family-based cost tracking
+db.exec(`
+  CREATE TABLE IF NOT EXISTS fund_event_families (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES fund_events(id) ON DELETE CASCADE,
+    head_member_id INTEGER NOT NULL REFERENCES members(id),
+    is_subscriber INTEGER DEFAULT 0,
+    adult_count INTEGER DEFAULT 0,
+    young_count INTEGER DEFAULT 0,
+    child_count INTEGER DEFAULT 0,
+    total_cost REAL DEFAULT 0,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_event_families_event ON fund_event_families(event_id)');
+
 // Create marriages table index
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_husband ON marriages(husband_id)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_wife ON marriages(wife_id)');
