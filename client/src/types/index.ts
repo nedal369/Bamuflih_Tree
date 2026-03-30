@@ -170,6 +170,7 @@ export interface EventFamily {
   child_count: number;
   total_members: number;
   total_cost: number;
+  manual_exempt?: boolean;
 }
 
 export interface EventRates {

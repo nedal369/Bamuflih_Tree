@@ -562,6 +562,47 @@ router.delete('/events/:id', authenticateToken, (req, res) => {
   res.json({ message: 'تم الحذف' });
 });
 
+// PUT /api/fund/events/:eventId/families/:familyId/exempt - Toggle manual exemption
+router.put('/events/:eventId/families/:familyId/exempt', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+
+  const family = db.prepare('SELECT * FROM fund_event_families WHERE id = ? AND event_id = ?').get(req.params.familyId, req.params.eventId);
+  if (!family) return res.status(404).json({ error: 'العائلة غير موجودة' });
+
+  const { manual_exempt } = req.body;
+  const isExempt = manual_exempt ? 1 : 0;
+
+  // If exempting manually, set total_cost to 0. Otherwise, recalculate.
+  if (isExempt) {
+    db.prepare('UPDATE fund_event_families SET manual_exempt = 1, total_cost = 0 WHERE id = ?').run(family.id);
+  } else {
+    // Recalculate cost for this family
+    const event = db.prepare('SELECT * FROM fund_events WHERE id = ?').get(req.params.eventId);
+    const costItems = {
+      dinner: event.dinner_cost || 0,
+      venue: event.venue_cost || 0,
+      hospitality: event.hospitality_cost || 0,
+      other: event.other_cost || 0,
+    };
+    const exemptions = event.subscriber_exemptions ? JSON.parse(event.subscriber_exemptions) : [];
+    const totalPerPerson = Object.values(costItems).reduce((s, v) => s + v, 0);
+    const subscriberExemptAmount = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
+    const subscriberAdultRate = totalPerPerson - subscriberExemptAmount;
+    const nonSubscriberAdultRate = totalPerPerson + (event.non_subscriber_surcharge || 0);
+    const youngMultiplier = event.young_cost_multiplier || 0.5;
+    const childMultiplier = event.child_cost_multiplier || 0;
+
+    const adultRate = family.is_subscriber ? subscriberAdultRate : nonSubscriberAdultRate;
+    const youngRate = adultRate * youngMultiplier;
+    const childRate = adultRate * childMultiplier;
+    const newCost = (family.adult_count * adultRate) + (family.young_count * youngRate) + (family.child_count * childRate);
+
+    db.prepare('UPDATE fund_event_families SET manual_exempt = 0, total_cost = ? WHERE id = ?').run(newCost, family.id);
+  }
+
+  res.json({ message: isExempt ? 'تم إعفاء العائلة' : 'تم إلغاء الإعفاء' });
+});
+
 // POST /api/fund/events/:id/attendees - Add attendee
 router.post('/events/:id/attendees', authenticateToken, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
@@ -809,6 +850,7 @@ router.get('/events/:id/report', (req, res) => {
     families: families.map(f => ({
       head_name: f.head_name,
       is_subscriber: !!f.is_subscriber,
+      manual_exempt: !!f.manual_exempt,
       adult_count: f.adult_count,
       young_count: f.young_count,
       child_count: f.child_count,
