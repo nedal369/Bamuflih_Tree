@@ -171,7 +171,11 @@ export async function generateEventReportPdf(report: EventReport): Promise<void>
     } else {
       pdf.setFillColor(255, 255, 255);
     }
-    if (!fam.is_subscriber) pdf.setFillColor(255, 250, 240);
+    if (fam.manual_exempt) {
+      pdf.setFillColor(245, 240, 255);
+    } else if (!fam.is_subscriber) {
+      pdf.setFillColor(255, 250, 240);
+    }
     pdf.rect(margin, y - 1, pageW - margin * 2, 7.5, 'F');
 
     pdf.setFontSize(8);
@@ -179,15 +183,25 @@ export async function generateEventReportPdf(report: EventReport): Promise<void>
     pdf.setTextColor(30, 30, 30);
 
     pdf.text(fam.head_name.substring(0, 28), cols[0].x, y + 4.5);
-    pdf.setTextColor(fam.is_subscriber ? 0 : 180, fam.is_subscriber ? 130 : 80, fam.is_subscriber ? 60 : 0);
-    pdf.text(fam.is_subscriber ? 'Subscribed' : 'Not Sub.', cols[1].x, y + 4.5);
+    if (fam.manual_exempt) {
+      pdf.setTextColor(120, 80, 200);
+      pdf.text('Exempt', cols[1].x, y + 4.5);
+    } else {
+      pdf.setTextColor(fam.is_subscriber ? 0 : 180, fam.is_subscriber ? 130 : 80, fam.is_subscriber ? 60 : 0);
+      pdf.text(fam.is_subscriber ? 'Subscribed' : 'Not Sub.', cols[1].x, y + 4.5);
+    }
     pdf.setTextColor(60, 60, 60);
     pdf.text(String(fam.adult_count), cols[2].x, y + 4.5);
     pdf.text(String(fam.young_count), cols[3].x, y + 4.5);
     pdf.text(String(fam.child_count), cols[4].x, y + 4.5);
     pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(0, 82, 204);
-    pdf.text(fmtNum(fam.total_cost), cols[5].x, y + 4.5);
+    if (fam.manual_exempt) {
+      pdf.setTextColor(120, 80, 200);
+      pdf.text('Exempt', cols[5].x, y + 4.5);
+    } else {
+      pdf.setTextColor(0, 82, 204);
+      pdf.text(fmtNum(fam.total_cost), cols[5].x, y + 4.5);
+    }
 
     y += 7.5;
     rowIdx++;

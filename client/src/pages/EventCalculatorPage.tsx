@@ -461,6 +461,16 @@ export default function EventCalculatorPage() {
     });
   };
 
+  const handleToggleExempt = async (familyId: number, currentExempt: boolean) => {
+    if (!selectedEvent) return;
+    try {
+      await api.put(`/fund/events/${selectedEvent.id}/families/${familyId}/exempt`, {
+        manual_exempt: !currentExempt,
+      });
+      await loadEventDetail(selectedEvent.id);
+    } catch { alert('خطأ في تحديث الإعفاء'); }
+  };
+
   if (loading) return <LoadingSpinner size="lg" />;
 
   const ev = selectedEvent;
@@ -687,12 +697,13 @@ export default function EventCalculatorPage() {
                           <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">بالغ</th>
                           <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">صغير</th>
                           <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">طفل</th>
+                          <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">إعفاء يدوي</th>
                           <th className="px-3 py-3 text-start text-text-secondary font-medium text-xs">المطلوب</th>
                         </tr>
                       </thead>
                       <tbody>
                         {families.map((f, i) => (
-                          <tr key={i} className={`border-b border-gray-50 hover:bg-surface/30 ${f.is_subscriber ? '' : 'bg-orange-50/30'}`}>
+                          <tr key={i} className={`border-b border-gray-50 hover:bg-surface/30 ${f.manual_exempt ? 'bg-purple-50/40' : f.is_subscriber ? '' : 'bg-orange-50/30'}`}>
                             <td className="px-3 py-2.5 font-medium text-sm">{f.head_name}</td>
                             <td className="px-3 py-2.5 text-center">
                               <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${f.is_subscriber ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
@@ -702,13 +713,26 @@ export default function EventCalculatorPage() {
                             <td className="px-3 py-2.5 text-center text-sm">{f.adult_count}</td>
                             <td className="px-3 py-2.5 text-center text-sm">{f.young_count}</td>
                             <td className="px-3 py-2.5 text-center text-sm">{f.child_count}</td>
-                            <td className="px-3 py-2.5 font-bold text-sm text-primary">{fmt(f.total_cost)}</td>
+                            <td className="px-3 py-2.5 text-center">
+                              <button
+                                onClick={() => f.id && handleToggleExempt(f.id, !!f.manual_exempt)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer border-none transition-colors ${f.manual_exempt ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                              >
+                                {f.manual_exempt ? 'معفى' : 'إعفاء'}
+                              </button>
+                            </td>
+                            <td className="px-3 py-2.5 font-bold text-sm">
+                              {f.manual_exempt
+                                ? <span className="text-purple-500">معفى</span>
+                                : <span className="text-primary">{fmt(f.total_cost)}</span>
+                              }
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot className="sticky bottom-0 bg-white border-t-2 border-gray-200">
                         <tr>
-                          <td className="px-3 py-3 font-black text-sm" colSpan={5}>الإجمالي</td>
+                          <td className="px-3 py-3 font-black text-sm" colSpan={6}>الإجمالي</td>
                           <td className="px-3 py-3 font-black text-primary text-sm">{fmt(grandTotal)}</td>
                         </tr>
                       </tfoot>
