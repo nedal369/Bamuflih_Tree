@@ -224,11 +224,62 @@ router.get('/members-status', (req, res) => {
 
 // ─── FAMILY HEADS ───
 
+// Helper: build family for a head, excluding children who are also selected heads
+function buildFamily(headId, allHeadIds, childAgeMax, youngAgeMax) {
+  const db2 = db; // alias
+  const head = db2.prepare('SELECT * FROM members WHERE id = ?').get(headId);
+  if (!head) return null;
+
+  const today = new Date();
+  const categorize = (birthDate) => {
+    if (!birthDate) return 'adult';
+    const birth = new Date(birthDate);
+    const age = Math.floor((today - birth) / (365.25 * 24 * 60 * 60 * 1000));
+    if (age <= childAgeMax) return 'child';
+    if (age <= youngAgeMax) return 'young';
+    return 'adult';
+  };
+
+  const familyMembers = [];
+  const headIdsSet = new Set(allHeadIds);
+
+  // Head himself
+  familyMembers.push({ id: head.id, name: head.name, relationship: 'head', category: categorize(head.birth_date) });
+
+  // Wives
+  const wives = db2.prepare(`
+    SELECT mar.wife_id, mar.wife_name, w.name as wife_member_name, w.birth_date as wife_birth_date, w.death_date as wife_death_date
+    FROM marriages mar LEFT JOIN members w ON mar.wife_id = w.id
+    WHERE mar.husband_id = ? AND mar.status = 'married'
+  `).all(headId);
+
+  for (const w of wives) {
+    if (w.wife_id && !w.wife_death_date) {
+      familyMembers.push({ id: w.wife_id, name: w.wife_member_name || w.wife_name, relationship: 'wife', category: categorize(w.wife_birth_date) });
+    } else if (!w.wife_id && w.wife_name) {
+      familyMembers.push({ id: null, name: w.wife_name, relationship: 'wife', category: 'adult' });
+    }
+  }
+
+  // Children — skip those who are also selected as family heads (they have their own family)
+  const children = db2.prepare('SELECT id, name, birth_date, gender FROM members WHERE father_id = ? AND death_date IS NULL').all(headId);
+  for (const c of children) {
+    if (headIdsSet.has(c.id)) continue; // deduplicate: this child is counted in his own family
+    familyMembers.push({ id: c.id, name: c.name, relationship: 'child', category: categorize(c.birth_date) });
+  }
+
+  return {
+    members: familyMembers,
+    adult_count: familyMembers.filter(m => m.category === 'adult').length,
+    young_count: familyMembers.filter(m => m.category === 'young').length,
+    child_count: familyMembers.filter(m => m.category === 'child').length,
+  };
+}
+
 // GET /api/fund/family-heads - Get all family heads with subscriber status and family composition
 router.get('/family-heads', (req, res) => {
-  const { child_age_max = 6, young_age_max = 15 } = req.query;
+  const { child_age_max = 6, young_age_max = 15, selected_ids } = req.query;
 
-  // Family heads = living males who have at least one child
   const heads = db.prepare(`
     SELECT m.id, m.name, m.birth_date, m.gender, m.generation,
       COALESCE(u.is_fund_subscriber, 0) as is_fund_subscriber
@@ -240,82 +291,25 @@ router.get('/family-heads', (req, res) => {
     ORDER BY m.generation, m.name
   `).all();
 
-  const today = new Date();
+  // Parse selected IDs for deduplication
+  const allHeadIds = selected_ids ? selected_ids.split(',').map(Number) : heads.map(h => h.id);
 
   const result = heads.map(head => {
-    // Get wives (active marriages)
-    const wives = db.prepare(`
-      SELECT mar.wife_id, mar.wife_name, mar.status as marriage_status,
-        w.name as wife_member_name, w.birth_date as wife_birth_date, w.death_date as wife_death_date
-      FROM marriages mar
-      LEFT JOIN members w ON mar.wife_id = w.id
-      WHERE mar.husband_id = ? AND mar.status IN ('married')
-    `).all(head.id);
-
-    // Get living children
-    const children = db.prepare(`
-      SELECT id, name, birth_date, gender FROM members
-      WHERE father_id = ? AND death_date IS NULL
-    `).all(head.id);
-
-    // Categorize family members by age
-    const categorize = (birthDate) => {
-      if (!birthDate) return 'adult';
-      const birth = new Date(birthDate);
-      const age = Math.floor((today - birth) / (365.25 * 24 * 60 * 60 * 1000));
-      if (age <= parseInt(child_age_max)) return 'child';
-      if (age <= parseInt(young_age_max)) return 'young';
-      return 'adult';
-    };
-
-    // Build family members list
-    const familyMembers = [];
-
-    // Head himself
-    familyMembers.push({
-      id: head.id, name: head.name, relationship: 'head',
-      category: categorize(head.birth_date)
-    });
-
-    // Wives
-    for (const w of wives) {
-      if (w.wife_id && !w.wife_death_date) {
-        familyMembers.push({
-          id: w.wife_id, name: w.wife_member_name || w.wife_name,
-          relationship: 'wife', category: categorize(w.wife_birth_date)
-        });
-      } else if (!w.wife_id && w.wife_name) {
-        familyMembers.push({
-          id: null, name: w.wife_name,
-          relationship: 'wife', category: 'adult'
-        });
-      }
-    }
-
-    // Children
-    for (const c of children) {
-      familyMembers.push({
-        id: c.id, name: c.name, relationship: 'child',
-        category: categorize(c.birth_date)
-      });
-    }
-
-    const adultCount = familyMembers.filter(m => m.category === 'adult').length;
-    const youngCount = familyMembers.filter(m => m.category === 'young').length;
-    const childCount = familyMembers.filter(m => m.category === 'child').length;
+    const family = buildFamily(head.id, allHeadIds, parseInt(child_age_max), parseInt(young_age_max));
+    if (!family) return null;
 
     return {
       id: head.id,
       name: head.name,
       generation: head.generation,
       is_fund_subscriber: !!head.is_fund_subscriber,
-      family_members: familyMembers,
-      adult_count: adultCount,
-      young_count: youngCount,
-      child_count: childCount,
-      total_members: familyMembers.length,
+      family_members: family.members,
+      adult_count: family.adult_count,
+      young_count: family.young_count,
+      child_count: family.child_count,
+      total_members: family.members.length,
     };
-  });
+  }).filter(Boolean);
 
   res.json(result);
 });
@@ -467,15 +461,19 @@ router.get('/events/:id', (req, res) => {
   const total = enrichedAttendees.reduce((sum, a) => sum + (a.final_cost || 0), 0);
   const familyTotal = families.reduce((sum, f) => sum + (f.total_cost || 0), 0);
 
-  // Calculate rates for display
+  // Calculate per-person rates (total costs ÷ total people)
   const costItems = { dinner: event.dinner_cost || 0, venue: event.venue_cost || 0, hospitality: event.hospitality_cost || 0, other: event.other_cost || 0 };
   const exemptions = event.subscriber_exemptions || [];
-  const totalPerPerson = Object.values(costItems).reduce((s, v) => s + v, 0);
-  const subscriberExemptAmount = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
-  const subscriberAdultRate = totalPerPerson - subscriberExemptAmount;
-  const nonSubscriberAdultRate = totalPerPerson + (event.non_subscriber_surcharge || 0);
+  const totalCostAll = Object.values(costItems).reduce((s, v) => s + v, 0);
+  const subscriberExemptTotal = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
+  const totalPeople = families.reduce((s, f) => s + f.adult_count + f.young_count + f.child_count, 0) || 1;
+  const perPersonAll = totalCostAll / totalPeople;
+  const perPersonSubscriberExempt = subscriberExemptTotal / totalPeople;
+  const surcharge = event.non_subscriber_surcharge || 0;
   const youngMultiplier = event.young_cost_multiplier || 0.5;
   const childMultiplier = event.child_cost_multiplier || 0;
+  const subscriberAdultRate = perPersonAll - perPersonSubscriberExempt;
+  const nonSubscriberAdultRate = perPersonAll + surcharge;
 
   res.json({
     ...event,
@@ -483,6 +481,7 @@ router.get('/events/:id', (req, res) => {
     total_cost: total,
     families,
     family_total_cost: familyTotal,
+    total_people: totalPeople,
     rates: {
       subscriber_adult: subscriberAdultRate,
       non_subscriber_adult: nonSubscriberAdultRate,
@@ -562,45 +561,63 @@ router.delete('/events/:id', authenticateToken, (req, res) => {
   res.json({ message: 'تم الحذف' });
 });
 
-// PUT /api/fund/events/:eventId/families/:familyId/exempt - Toggle manual exemption
-router.put('/events/:eventId/families/:familyId/exempt', authenticateToken, (req, res) => {
+// PUT /api/fund/events/:eventId/families/:familyId - Update family (counts, exempt_count)
+router.put('/events/:eventId/families/:familyId', authenticateToken, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
 
   const family = db.prepare('SELECT * FROM fund_event_families WHERE id = ? AND event_id = ?').get(req.params.familyId, req.params.eventId);
   if (!family) return res.status(404).json({ error: 'العائلة غير موجودة' });
 
-  const { manual_exempt } = req.body;
-  const isExempt = manual_exempt ? 1 : 0;
+  const { adult_count, young_count, child_count, exempt_count } = req.body;
+  const newAdult = adult_count !== undefined ? parseInt(adult_count) : family.adult_count;
+  const newYoung = young_count !== undefined ? parseInt(young_count) : family.young_count;
+  const newChild = child_count !== undefined ? parseInt(child_count) : family.child_count;
+  const newExempt = exempt_count !== undefined ? Math.max(0, Math.min(parseInt(exempt_count), newAdult + newYoung + newChild)) : (family.exempt_count || 0);
 
-  // If exempting manually, set total_cost to 0. Otherwise, recalculate.
-  if (isExempt) {
-    db.prepare('UPDATE fund_event_families SET manual_exempt = 1, total_cost = 0 WHERE id = ?').run(family.id);
-  } else {
-    // Recalculate cost for this family
-    const event = db.prepare('SELECT * FROM fund_events WHERE id = ?').get(req.params.eventId);
-    const costItems = {
-      dinner: event.dinner_cost || 0,
-      venue: event.venue_cost || 0,
-      hospitality: event.hospitality_cost || 0,
-      other: event.other_cost || 0,
-    };
-    const exemptions = event.subscriber_exemptions ? JSON.parse(event.subscriber_exemptions) : [];
-    const totalPerPerson = Object.values(costItems).reduce((s, v) => s + v, 0);
-    const subscriberExemptAmount = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
-    const subscriberAdultRate = totalPerPerson - subscriberExemptAmount;
-    const nonSubscriberAdultRate = totalPerPerson + (event.non_subscriber_surcharge || 0);
-    const youngMultiplier = event.young_cost_multiplier || 0.5;
-    const childMultiplier = event.child_cost_multiplier || 0;
+  // Recalculate cost for this family using event-level rates
+  const event = db.prepare('SELECT * FROM fund_events WHERE id = ?').get(req.params.eventId);
+  const allFamilies = db.prepare('SELECT * FROM fund_event_families WHERE event_id = ?').all(req.params.eventId);
 
-    const adultRate = family.is_subscriber ? subscriberAdultRate : nonSubscriberAdultRate;
-    const youngRate = adultRate * youngMultiplier;
-    const childRate = adultRate * childMultiplier;
-    const newCost = (family.adult_count * adultRate) + (family.young_count * youngRate) + (family.child_count * childRate);
-
-    db.prepare('UPDATE fund_event_families SET manual_exempt = 0, total_cost = ? WHERE id = ?').run(newCost, family.id);
+  // Total people across ALL families (using updated counts for this family)
+  let totalPeople = 0;
+  for (const f of allFamilies) {
+    if (f.id === family.id) {
+      totalPeople += newAdult + newYoung + newChild;
+    } else {
+      totalPeople += f.adult_count + f.young_count + f.child_count;
+    }
   }
+  if (totalPeople === 0) totalPeople = 1;
 
-  res.json({ message: isExempt ? 'تم إعفاء العائلة' : 'تم إلغاء الإعفاء' });
+  const costItems = { dinner: event.dinner_cost || 0, venue: event.venue_cost || 0, hospitality: event.hospitality_cost || 0, other: event.other_cost || 0 };
+  const exemptions = event.subscriber_exemptions ? JSON.parse(event.subscriber_exemptions) : [];
+  const totalCostAll = Object.values(costItems).reduce((s, v) => s + v, 0);
+  const subscriberExemptTotal = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
+
+  // Per-person rates
+  const perPersonAll = totalCostAll / totalPeople;
+  const perPersonSubscriberExempt = subscriberExemptTotal / totalPeople;
+  const surcharge = (event.non_subscriber_surcharge || 0);
+  const youngMult = event.young_cost_multiplier || 0.5;
+  const childMult = event.child_cost_multiplier || 0;
+
+  const subscriberAdultRate = perPersonAll - perPersonSubscriberExempt;
+  const nonSubscriberAdultRate = perPersonAll + surcharge;
+  const adultRate = family.is_subscriber ? subscriberAdultRate : nonSubscriberAdultRate;
+
+  const payingMembers = (newAdult + newYoung + newChild) - newExempt;
+  const payingAdults = Math.max(0, newAdult - newExempt);
+  const remainingExempt = Math.max(0, newExempt - newAdult);
+  const payingYoung = Math.max(0, newYoung - remainingExempt);
+  const remainingExempt2 = Math.max(0, remainingExempt - newYoung);
+  const payingChildren = Math.max(0, newChild - remainingExempt2);
+
+  const newCost = (payingAdults * adultRate) + (payingYoung * adultRate * youngMult) + (payingChildren * adultRate * childMult);
+
+  db.prepare('UPDATE fund_event_families SET adult_count = ?, young_count = ?, child_count = ?, exempt_count = ?, total_cost = ? WHERE id = ?')
+    .run(newAdult, newYoung, newChild, newExempt, Math.max(0, newCost), family.id);
+
+  res.json({ message: 'تم التحديث' });
 });
 
 // POST /api/fund/events/:id/attendees - Add attendee
@@ -693,88 +710,63 @@ router.post('/events/:id/calculate-families', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'يرجى اختيار أرباب أسر' });
   }
 
-  // Cost calculation
-  const costItems = {
-    dinner: event.dinner_cost || 0,
-    venue: event.venue_cost || 0,
-    hospitality: event.hospitality_cost || 0,
-    other: event.other_cost || 0,
-  };
-  const exemptions = event.subscriber_exemptions ? JSON.parse(event.subscriber_exemptions) : [];
-  const totalPerPerson = Object.values(costItems).reduce((s, v) => s + v, 0);
-  const subscriberExemptAmount = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
-  const subscriberAdultRate = totalPerPerson - subscriberExemptAmount;
-  const nonSubscriberAdultRate = totalPerPerson + (event.non_subscriber_surcharge || 0);
-  const youngMultiplier = event.young_cost_multiplier || 0.5;
-  const childMultiplier = event.child_cost_multiplier || 0;
-
-  const today = new Date();
   const childAgeMax = event.child_age_max || 6;
   const youngAgeMax = event.young_age_max || 15;
 
-  const categorizeByAge = (birthDate) => {
-    if (!birthDate) return 'adult';
-    const birth = new Date(birthDate);
-    const age = Math.floor((today - birth) / (365.25 * 24 * 60 * 60 * 1000));
-    if (age <= childAgeMax) return 'child';
-    if (age <= youngAgeMax) return 'young';
-    return 'adult';
-  };
+  // Step 1: Build all families with deduplication
+  const familyData = [];
+  for (const headId of family_head_ids) {
+    const head = db.prepare('SELECT * FROM members WHERE id = ?').get(headId);
+    if (!head || head.death_date) continue;
 
-  // Clear existing families for this event
+    const user = db.prepare("SELECT is_fund_subscriber FROM users WHERE member_id = ? AND status = 'approved'").get(headId);
+    const isSubscriber = user ? !!user.is_fund_subscriber : false;
+
+    // Use buildFamily with all selected IDs for deduplication
+    const family = buildFamily(headId, family_head_ids, childAgeMax, youngAgeMax);
+    if (!family) continue;
+
+    familyData.push({
+      headId, isSubscriber,
+      adult_count: family.adult_count,
+      young_count: family.young_count,
+      child_count: family.child_count,
+    });
+  }
+
+  // Step 2: Calculate total people across all families
+  const totalPeople = familyData.reduce((s, f) => s + f.adult_count + f.young_count + f.child_count, 0);
+  if (totalPeople === 0) return res.json({ message: 'لا يوجد حضور', count: 0 });
+
+  // Step 3: Calculate per-person rates (total costs ÷ total people)
+  const costItems = { dinner: event.dinner_cost || 0, venue: event.venue_cost || 0, hospitality: event.hospitality_cost || 0, other: event.other_cost || 0 };
+  const exemptions = event.subscriber_exemptions ? JSON.parse(event.subscriber_exemptions) : [];
+  const totalCostAll = Object.values(costItems).reduce((s, v) => s + v, 0);
+  const subscriberExemptTotal = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
+
+  const perPersonAll = totalCostAll / totalPeople;
+  const perPersonSubscriberExempt = subscriberExemptTotal / totalPeople;
+  const surcharge = event.non_subscriber_surcharge || 0;
+  const youngMultiplier = event.young_cost_multiplier || 0.5;
+  const childMultiplier = event.child_cost_multiplier || 0;
+
+  // Step 4: Clear and insert
   db.prepare('DELETE FROM fund_event_families WHERE event_id = ?').run(event.id);
 
   const insert = db.prepare(`
-    INSERT INTO fund_event_families (event_id, head_member_id, is_subscriber, adult_count, young_count, child_count, total_cost)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO fund_event_families (event_id, head_member_id, is_subscriber, adult_count, young_count, child_count, exempt_count, total_cost)
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
   `);
 
   const insertAll = db.transaction(() => {
-    for (const headId of family_head_ids) {
-      const head = db.prepare('SELECT * FROM members WHERE id = ?').get(headId);
-      if (!head || head.death_date) continue;
-
-      // Check subscriber status
-      const user = db.prepare("SELECT is_fund_subscriber FROM users WHERE member_id = ? AND status = 'approved'").get(headId);
-      const isSubscriber = user ? !!user.is_fund_subscriber : false;
-
-      // Gather family: head + wives + children
-      const familyMembers = [];
-      familyMembers.push({ category: categorizeByAge(head.birth_date) });
-
-      // Wives
-      const wives = db.prepare(`
-        SELECT w.birth_date, w.death_date, mar.wife_name, mar.wife_id
-        FROM marriages mar
-        LEFT JOIN members w ON mar.wife_id = w.id
-        WHERE mar.husband_id = ? AND mar.status = 'married'
-      `).all(headId);
-
-      for (const w of wives) {
-        if (w.wife_id && !w.death_date) {
-          familyMembers.push({ category: categorizeByAge(w.birth_date) });
-        } else if (!w.wife_id && w.wife_name) {
-          familyMembers.push({ category: 'adult' });
-        }
-      }
-
-      // Children
-      const children = db.prepare('SELECT birth_date FROM members WHERE father_id = ? AND death_date IS NULL').all(headId);
-      for (const c of children) {
-        familyMembers.push({ category: categorizeByAge(c.birth_date) });
-      }
-
-      const adultCount = familyMembers.filter(m => m.category === 'adult').length;
-      const youngCount = familyMembers.filter(m => m.category === 'young').length;
-      const childCount = familyMembers.filter(m => m.category === 'child').length;
-
-      const adultRate = isSubscriber ? subscriberAdultRate : nonSubscriberAdultRate;
+    for (const fam of familyData) {
+      const subscriberAdultRate = perPersonAll - perPersonSubscriberExempt;
+      const nonSubscriberAdultRate = perPersonAll + surcharge;
+      const adultRate = fam.isSubscriber ? subscriberAdultRate : nonSubscriberAdultRate;
       const youngRate = adultRate * youngMultiplier;
       const childRate = adultRate * childMultiplier;
-
-      const totalCost = (adultCount * adultRate) + (youngCount * youngRate) + (childCount * childRate);
-
-      insert.run(event.id, headId, isSubscriber ? 1 : 0, adultCount, youngCount, childCount, totalCost);
+      const totalCost = (fam.adult_count * adultRate) + (fam.young_count * youngRate) + (fam.child_count * childRate);
+      insert.run(event.id, fam.headId, fam.isSubscriber ? 1 : 0, fam.adult_count, fam.young_count, fam.child_count, totalCost);
     }
   });
   insertAll();
@@ -805,10 +797,8 @@ router.get('/events/:id/report', (req, res) => {
     other: event.other_cost || 0,
   };
   const exemptions = event.subscriber_exemptions || [];
-  const totalPerPerson = Object.values(costItems).reduce((s, v) => s + v, 0);
-  const subscriberExemptAmount = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
-  const subscriberAdultRate = totalPerPerson - subscriberExemptAmount;
-  const nonSubscriberAdultRate = totalPerPerson + (event.non_subscriber_surcharge || 0);
+  const totalCostAll = Object.values(costItems).reduce((s, v) => s + v, 0);
+  const subscriberExemptTotal = exemptions.reduce((s, key) => s + (costItems[key] || 0), 0);
   const youngMultiplier = event.young_cost_multiplier || 0.5;
   const childMultiplier = event.child_cost_multiplier || 0;
 
@@ -819,6 +809,13 @@ router.get('/events/:id/report', (req, res) => {
   const totalAdults = families.reduce((s, f) => s + f.adult_count, 0);
   const totalYoung = families.reduce((s, f) => s + f.young_count, 0);
   const totalChildren = families.reduce((s, f) => s + f.child_count, 0);
+  const totalPeople = totalAdults + totalYoung + totalChildren || 1;
+
+  const perPersonAll = totalCostAll / totalPeople;
+  const perPersonSubscriberExempt = subscriberExemptTotal / totalPeople;
+  const surcharge = event.non_subscriber_surcharge || 0;
+  const subscriberAdultRate = perPersonAll - perPersonSubscriberExempt;
+  const nonSubscriberAdultRate = perPersonAll + surcharge;
 
   res.json({
     event: {
@@ -828,7 +825,7 @@ router.get('/events/:id/report', (req, res) => {
     },
     cost_breakdown: costItems,
     subscriber_exemptions: exemptions,
-    non_subscriber_surcharge: event.non_subscriber_surcharge || 0,
+    non_subscriber_surcharge: surcharge,
     rates: {
       subscriber_adult: subscriberAdultRate,
       non_subscriber_adult: nonSubscriberAdultRate,
@@ -844,13 +841,13 @@ router.get('/events/:id/report', (req, res) => {
       total_adults: totalAdults,
       total_young: totalYoung,
       total_children: totalChildren,
-      total_people: totalAdults + totalYoung + totalChildren,
+      total_people: totalPeople,
       grand_total: grandTotal,
     },
     families: families.map(f => ({
       head_name: f.head_name,
       is_subscriber: !!f.is_subscriber,
-      manual_exempt: !!f.manual_exempt,
+      exempt_count: f.exempt_count || 0,
       adult_count: f.adult_count,
       young_count: f.young_count,
       child_count: f.child_count,
