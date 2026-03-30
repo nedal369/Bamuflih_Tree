@@ -196,16 +196,16 @@ db.exec(`
     young_count INTEGER DEFAULT 0,
     child_count INTEGER DEFAULT 0,
     total_cost REAL DEFAULT 0,
-    manual_exempt INTEGER DEFAULT 0,
+    exempt_count INTEGER DEFAULT 0,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `);
 db.exec('CREATE INDEX IF NOT EXISTS idx_event_families_event ON fund_event_families(event_id)');
 
-// Add manual_exempt column if missing
+// Migration: rename manual_exempt to exempt_count if needed
 const fefCols = db.prepare("PRAGMA table_info(fund_event_families)").all().map(c => c.name);
-if (!fefCols.includes('manual_exempt')) db.exec('ALTER TABLE fund_event_families ADD COLUMN manual_exempt INTEGER DEFAULT 0');
+if (!fefCols.includes('exempt_count')) db.exec('ALTER TABLE fund_event_families ADD COLUMN exempt_count INTEGER DEFAULT 0');
 
 // Create marriages table index
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_husband ON marriages(husband_id)');

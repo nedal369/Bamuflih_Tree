@@ -166,11 +166,12 @@ function EventFormPanel({ initial, onSave, onCancel }: {
 
       {/* Itemized Costs */}
       <div className="border-t border-gray-100 pt-4">
-        <h3 className="font-bold text-text mb-3">تفصيل التكاليف</h3>
+        <h3 className="font-bold text-text mb-3">إجمالي التكاليف</h3>
+        <p className="text-xs text-text-secondary mb-2">أدخل التكلفة الإجمالية لكل بند (سيتم تقسيمها على عدد الحضور تلقائياً)</p>
         <div className="grid grid-cols-2 gap-3">
           {(['dinner', 'venue', 'hospitality', 'other'] as const).map(key => (
             <div key={key}>
-              <label className="block text-xs font-medium text-text-secondary mb-1">{costItemLabels[key]} (ر.س)</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">إجمالي {costItemLabels[key]} (ر.س)</label>
               <input type="number" min={0} value={(form as any)[`${key}_cost`]}
                 onChange={e => setForm({ ...form, [`${key}_cost`]: parseFloat(e.target.value) || 0 } as EventForm)}
                 className="w-full px-3 py-2.5 bg-surface rounded-xl border-none text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
@@ -178,7 +179,8 @@ function EventFormPanel({ initial, onSave, onCancel }: {
           ))}
         </div>
         <div className="mt-3 p-3 bg-blue-50 rounded-xl text-sm text-blue-700 font-medium">
-          إجمالي التكلفة للشخص: {fmt(totalCost)}
+          إجمالي جميع التكاليف: {fmt(totalCost)}
+          <span className="text-xs opacity-70 block mt-1">سيُقسم على عدد الحضور لتحديد نصيب الفرد</span>
         </div>
       </div>
 
@@ -239,7 +241,8 @@ function EventFormPanel({ initial, onSave, onCancel }: {
 
       {/* Rate Preview */}
       <div className="border-t border-gray-100 pt-4">
-        <h3 className="font-bold text-text mb-3">معاينة الأسعار</h3>
+        <h3 className="font-bold text-text mb-1">معاينة الأسعار</h3>
+        <p className="text-xs text-text-secondary mb-3">تقديرية — الأسعار الفعلية تُحسب بعد اختيار الحضور</p>
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-green-50 rounded-xl border border-green-100">
             <p className="text-xs text-green-600 font-medium mb-1">المشترك - بالغ</p>
@@ -380,7 +383,8 @@ export default function EventCalculatorPage() {
       const ev = res.data;
       setSelectedEvent(ev);
       // Load family heads with event's age settings
-      const headsRes = await api.get(`/fund/family-heads?child_age_max=${ev.child_age_max}&young_age_max=${ev.young_age_max}`);
+      const existingIds = ev.families && ev.families.length > 0 ? ev.families.map((f: EventFamily) => f.head_member_id).join(',') : '';
+      const headsRes = await api.get(`/fund/family-heads?child_age_max=${ev.child_age_max}&young_age_max=${ev.young_age_max}${existingIds ? '&selected_ids=' + existingIds : ''}`);
       setFamilyHeads(headsRes.data);
       // Pre-select heads that already have families in this event
       if (ev.families && ev.families.length > 0) {
@@ -461,14 +465,12 @@ export default function EventCalculatorPage() {
     });
   };
 
-  const handleToggleExempt = async (familyId: number, currentExempt: boolean) => {
+  const handleUpdateFamily = async (familyId: number, data: { adult_count?: number; young_count?: number; child_count?: number; exempt_count?: number }) => {
     if (!selectedEvent) return;
     try {
-      await api.put(`/fund/events/${selectedEvent.id}/families/${familyId}/exempt`, {
-        manual_exempt: !currentExempt,
-      });
+      await api.put(`/fund/events/${selectedEvent.id}/families/${familyId}`, data);
       await loadEventDetail(selectedEvent.id);
-    } catch { alert('خطأ في تحديث الإعفاء'); }
+    } catch { alert('خطأ في التحديث'); }
   };
 
   if (loading) return <LoadingSpinner size="lg" />;
@@ -606,7 +608,8 @@ export default function EventCalculatorPage() {
             {/* Rate Summary */}
             {rates && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <h3 className="font-bold text-text mb-3 text-sm">الأسعار حسب الاشتراك</h3>
+                <h3 className="font-bold text-text mb-1 text-sm">نصيب الفرد حسب الاشتراك</h3>
+                <p className="text-xs text-text-secondary mb-3">إجمالي التكاليف ÷ عدد الحضور = نصيب الفرد</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 bg-green-50 rounded-xl border border-green-100">
                     <p className="text-xs text-green-600 font-semibold mb-1">✓ المشترك</p>
@@ -686,54 +689,66 @@ export default function EventCalculatorPage() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                     <h3 className="font-bold text-text text-sm">تفصيل العائلات</h3>
-                    <span className="text-xs text-text-secondary">{families.length} عائلة</span>
+                    <span className="text-xs text-text-secondary">{families.length} عائلة — يمكنك تعديل الأعداد يدوياً</span>
                   </div>
-                  <div className="overflow-x-auto max-h-[450px] overflow-y-auto">
+                  <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead className="sticky top-0 bg-white z-10">
                         <tr className="bg-surface/50 border-b border-gray-100">
-                          <th className="px-3 py-3 text-start text-text-secondary font-medium text-xs">رب الأسرة</th>
-                          <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">اشتراك</th>
-                          <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">بالغ</th>
-                          <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">صغير</th>
-                          <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">طفل</th>
-                          <th className="px-3 py-3 text-center text-text-secondary font-medium text-xs">إعفاء يدوي</th>
-                          <th className="px-3 py-3 text-start text-text-secondary font-medium text-xs">المطلوب</th>
+                          <th className="px-2 py-3 text-start text-text-secondary font-medium text-xs">رب الأسرة</th>
+                          <th className="px-2 py-3 text-center text-text-secondary font-medium text-xs">اشتراك</th>
+                          <th className="px-2 py-3 text-center text-text-secondary font-medium text-xs w-16">بالغ</th>
+                          <th className="px-2 py-3 text-center text-text-secondary font-medium text-xs w-16">صغير</th>
+                          <th className="px-2 py-3 text-center text-text-secondary font-medium text-xs w-16">طفل</th>
+                          <th className="px-2 py-3 text-center text-text-secondary font-medium text-xs w-16">معفيون</th>
+                          <th className="px-2 py-3 text-start text-text-secondary font-medium text-xs">المطلوب</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {families.map((f, i) => (
-                          <tr key={i} className={`border-b border-gray-50 hover:bg-surface/30 ${f.manual_exempt ? 'bg-purple-50/40' : f.is_subscriber ? '' : 'bg-orange-50/30'}`}>
-                            <td className="px-3 py-2.5 font-medium text-sm">{f.head_name}</td>
-                            <td className="px-3 py-2.5 text-center">
+                        {families.map((f, i) => {
+                          const totalMembers = f.adult_count + f.young_count + f.child_count;
+                          return (
+                          <tr key={i} className={`border-b border-gray-50 hover:bg-surface/30 ${(f.exempt_count || 0) >= totalMembers ? 'bg-purple-50/40' : f.is_subscriber ? '' : 'bg-orange-50/30'}`}>
+                            <td className="px-2 py-2 font-medium text-sm">{f.head_name}</td>
+                            <td className="px-2 py-2 text-center">
                               <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${f.is_subscriber ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                                 {f.is_subscriber ? 'مشترك' : 'غير مشترك'}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-center text-sm">{f.adult_count}</td>
-                            <td className="px-3 py-2.5 text-center text-sm">{f.young_count}</td>
-                            <td className="px-3 py-2.5 text-center text-sm">{f.child_count}</td>
-                            <td className="px-3 py-2.5 text-center">
-                              <button
-                                onClick={() => f.id && handleToggleExempt(f.id, !!f.manual_exempt)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer border-none transition-colors ${f.manual_exempt ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                              >
-                                {f.manual_exempt ? 'معفى' : 'إعفاء'}
-                              </button>
+                            <td className="px-1 py-2 text-center">
+                              <input type="number" min={0} value={f.adult_count}
+                                onChange={e => f.id && handleUpdateFamily(f.id, { adult_count: parseInt(e.target.value) || 0 })}
+                                className="w-14 px-1 py-1 bg-surface rounded-lg border-none text-center text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
                             </td>
-                            <td className="px-3 py-2.5 font-bold text-sm">
-                              {f.manual_exempt
-                                ? <span className="text-purple-500">معفى</span>
+                            <td className="px-1 py-2 text-center">
+                              <input type="number" min={0} value={f.young_count}
+                                onChange={e => f.id && handleUpdateFamily(f.id, { young_count: parseInt(e.target.value) || 0 })}
+                                className="w-14 px-1 py-1 bg-surface rounded-lg border-none text-center text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                            </td>
+                            <td className="px-1 py-2 text-center">
+                              <input type="number" min={0} value={f.child_count}
+                                onChange={e => f.id && handleUpdateFamily(f.id, { child_count: parseInt(e.target.value) || 0 })}
+                                className="w-14 px-1 py-1 bg-surface rounded-lg border-none text-center text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                            </td>
+                            <td className="px-1 py-2 text-center">
+                              <input type="number" min={0} max={totalMembers} value={f.exempt_count || 0}
+                                onChange={e => f.id && handleUpdateFamily(f.id, { exempt_count: parseInt(e.target.value) || 0 })}
+                                className={`w-14 px-1 py-1 rounded-lg border-none text-center text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 ${(f.exempt_count || 0) > 0 ? 'bg-purple-100 text-purple-700 font-bold' : 'bg-surface'}`} />
+                            </td>
+                            <td className="px-2 py-2 font-bold text-sm">
+                              {(f.exempt_count || 0) >= totalMembers
+                                ? <span className="text-purple-500">معفى بالكامل</span>
                                 : <span className="text-primary">{fmt(f.total_cost)}</span>
                               }
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                       <tfoot className="sticky bottom-0 bg-white border-t-2 border-gray-200">
                         <tr>
-                          <td className="px-3 py-3 font-black text-sm" colSpan={6}>الإجمالي</td>
-                          <td className="px-3 py-3 font-black text-primary text-sm">{fmt(grandTotal)}</td>
+                          <td className="px-2 py-3 font-black text-sm" colSpan={6}>الإجمالي</td>
+                          <td className="px-2 py-3 font-black text-primary text-sm">{fmt(grandTotal)}</td>
                         </tr>
                       </tfoot>
                     </table>

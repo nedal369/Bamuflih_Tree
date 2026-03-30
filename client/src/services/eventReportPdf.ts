@@ -171,7 +171,9 @@ export async function generateEventReportPdf(report: EventReport): Promise<void>
     } else {
       pdf.setFillColor(255, 255, 255);
     }
-    if (fam.manual_exempt) {
+    const totalMembers = fam.adult_count + fam.young_count + fam.child_count;
+    const isFullyExempt = (fam.exempt_count || 0) >= totalMembers;
+    if (isFullyExempt) {
       pdf.setFillColor(245, 240, 255);
     } else if (!fam.is_subscriber) {
       pdf.setFillColor(255, 250, 240);
@@ -183,19 +185,16 @@ export async function generateEventReportPdf(report: EventReport): Promise<void>
     pdf.setTextColor(30, 30, 30);
 
     pdf.text(fam.head_name.substring(0, 28), cols[0].x, y + 4.5);
-    if (fam.manual_exempt) {
-      pdf.setTextColor(120, 80, 200);
-      pdf.text('Exempt', cols[1].x, y + 4.5);
-    } else {
-      pdf.setTextColor(fam.is_subscriber ? 0 : 180, fam.is_subscriber ? 130 : 80, fam.is_subscriber ? 60 : 0);
-      pdf.text(fam.is_subscriber ? 'Subscribed' : 'Not Sub.', cols[1].x, y + 4.5);
-    }
+    pdf.setTextColor(fam.is_subscriber ? 0 : 180, fam.is_subscriber ? 130 : 80, fam.is_subscriber ? 60 : 0);
+    const statusText = fam.is_subscriber ? 'Subscribed' : 'Not Sub.';
+    const exemptText = (fam.exempt_count || 0) > 0 ? ` (${fam.exempt_count} exempt)` : '';
+    pdf.text(statusText + exemptText, cols[1].x, y + 4.5);
     pdf.setTextColor(60, 60, 60);
     pdf.text(String(fam.adult_count), cols[2].x, y + 4.5);
     pdf.text(String(fam.young_count), cols[3].x, y + 4.5);
     pdf.text(String(fam.child_count), cols[4].x, y + 4.5);
     pdf.setFont('helvetica', 'bold');
-    if (fam.manual_exempt) {
+    if (isFullyExempt) {
       pdf.setTextColor(120, 80, 200);
       pdf.text('Exempt', cols[5].x, y + 4.5);
     } else {
