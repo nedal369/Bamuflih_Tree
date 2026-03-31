@@ -1,14 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import api from '../services/api';
 import type { FamilyHead, EventFamily, EventRates } from '../types';
-
-const api = axios.create({ baseURL: '/api' });
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
 
 // ─── Types ───
 interface EventForm {
