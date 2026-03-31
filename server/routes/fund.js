@@ -210,16 +210,74 @@ router.get('/members-status', (req, res) => {
   const month = parseInt(req.query.month) || now.getMonth() + 1;
 
   const members = db.prepare(`
-    SELECT m.id, m.name, m.generation, m.gender,
+    SELECT fsr.subscriber_code, m.id, m.name, m.generation, m.gender,
       fs.amount as paid_amount, fs.paid_date
-    FROM members m
+    FROM fund_subscriber_registrations fsr
+    JOIN members m ON m.id = fsr.member_id
     LEFT JOIN fund_subscriptions fs
       ON fs.member_id = m.id AND fs.year = ? AND fs.month = ?
-    WHERE m.gender = 'male' AND m.death_date IS NULL
-    ORDER BY m.generation, m.name
+    ORDER BY fsr.subscriber_code, m.name
   `).all(year, month);
 
   res.json({ year, month, members });
+});
+
+// ─── SUBSCRIBER REGISTRATIONS ───
+
+// GET /api/fund/subscribers - List all registered fund subscribers
+router.get('/subscribers', (req, res) => {
+  const rows = db.prepare(`
+    SELECT fsr.id, fsr.member_id, fsr.subscriber_code, fsr.monthly_amount,
+           fsr.registered_date, fsr.notes, fsr.created_at,
+           m.name as member_name, m.generation, m.gender
+    FROM fund_subscriber_registrations fsr
+    JOIN members m ON m.id = fsr.member_id
+    ORDER BY fsr.subscriber_code
+  `).all();
+  res.json(rows);
+});
+
+// POST /api/fund/subscribers - Register a member as a fund subscriber (admin only)
+router.post('/subscribers', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+
+  const { member_id, monthly_amount = 100, registered_date, notes } = req.body;
+  if (!member_id || !registered_date) {
+    return res.status(400).json({ error: 'معرف العضو وتاريخ التسجيل مطلوبان' });
+  }
+
+  // Check member exists
+  const member = db.prepare('SELECT id, name FROM members WHERE id = ?').get(parseInt(member_id));
+  if (!member) return res.status(404).json({ error: 'العضو غير موجود' });
+
+  // Auto-generate subscriber code
+  const count = db.prepare('SELECT COUNT(*) as c FROM fund_subscriber_registrations').get().c;
+  const subscriber_code = 'SUB-' + String(count + 1).padStart(3, '0');
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO fund_subscriber_registrations (member_id, subscriber_code, monthly_amount, registered_date, notes)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(parseInt(member_id), subscriber_code, parseFloat(monthly_amount), registered_date, notes || null);
+
+    res.status(201).json({ id: result.lastInsertRowid, subscriber_code, message: 'تم تسجيل المشترك بنجاح' });
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: 'هذا العضو مسجل كمشترك مسبقاً' });
+    }
+    throw err;
+  }
+});
+
+// DELETE /api/fund/subscribers/:id - Remove a subscriber registration (admin only)
+router.delete('/subscribers/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+
+  const existing = db.prepare('SELECT id FROM fund_subscriber_registrations WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'المشترك غير موجود' });
+
+  db.prepare('DELETE FROM fund_subscriber_registrations WHERE id = ?').run(req.params.id);
+  res.json({ message: 'تم إلغاء تسجيل المشترك' });
 });
 
 // ─── FAMILY HEADS ───
@@ -282,9 +340,13 @@ router.get('/family-heads', (req, res) => {
 
   const heads = db.prepare(`
     SELECT m.id, m.name, m.birth_date, m.gender, m.generation,
-      COALESCE(u.is_fund_subscriber, 0) as is_fund_subscriber
+      CASE WHEN fsr.id IS NOT NULL THEN 1
+           WHEN COALESCE(u.is_fund_subscriber, 0) = 1 THEN 1
+           ELSE 0
+      END as is_fund_subscriber
     FROM members m
     LEFT JOIN users u ON u.member_id = m.id AND u.status = 'approved'
+    LEFT JOIN fund_subscriber_registrations fsr ON fsr.member_id = m.id
     WHERE m.gender = 'male'
       AND m.death_date IS NULL
       AND EXISTS (SELECT 1 FROM members c WHERE c.father_id = m.id)

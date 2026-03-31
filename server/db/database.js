@@ -203,6 +203,20 @@ db.exec(`
 `);
 db.exec('CREATE INDEX IF NOT EXISTS idx_event_families_event ON fund_event_families(event_id)');
 
+// Subscriber registrations table — members enrolled as fund subscribers with unique codes
+db.exec(`
+  CREATE TABLE IF NOT EXISTS fund_subscriber_registrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER NOT NULL UNIQUE REFERENCES members(id) ON DELETE CASCADE,
+    subscriber_code TEXT UNIQUE NOT NULL,
+    monthly_amount REAL DEFAULT 100,
+    registered_date TEXT NOT NULL,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_subscriber_reg_member ON fund_subscriber_registrations(member_id)');
+
 // Migration: rename manual_exempt to exempt_count if needed
 const fefCols = db.prepare("PRAGMA table_info(fund_event_families)").all().map(c => c.name);
 if (!fefCols.includes('exempt_count')) db.exec('ALTER TABLE fund_event_families ADD COLUMN exempt_count INTEGER DEFAULT 0');

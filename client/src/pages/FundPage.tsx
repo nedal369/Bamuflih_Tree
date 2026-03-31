@@ -50,8 +50,22 @@ interface MemberStatus {
   name: string;
   generation: number;
   gender: string;
+  subscriber_code?: string;
   paid_amount?: number;
   paid_date?: string;
+}
+
+interface FundSubscriberRegistration {
+  id: number;
+  member_id: number;
+  member_name: string;
+  subscriber_code: string;
+  monthly_amount: number;
+  registered_date: string;
+  notes?: string;
+  generation: number;
+  gender: string;
+  created_at: string;
 }
 
 const typeLabels: Record<string, { label: string; color: string; sign: string }> = {
@@ -106,7 +120,7 @@ export default function FundPage() {
   const [loans, setLoans] = useState<FundLoan[]>([]);
   const [membersStatus, setMembersStatus] = useState<MemberStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'loans' | 'subscriptions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'subscribers' | 'transactions' | 'loans' | 'subscriptions'>('overview');
 
   const now = new Date();
   const [statusYear, setStatusYear] = useState(now.getFullYear());
@@ -124,6 +138,13 @@ export default function FundPage() {
 
   // Loan management
   const [updatingLoan, setUpdatingLoan] = useState<number | null>(null);
+
+  // Subscriber registrations
+  const [subscribers, setSubscribers] = useState<FundSubscriberRegistration[]>([]);
+  const [showAddSubscriber, setShowAddSubscriber] = useState(false);
+  const [subRegForm, setSubRegForm] = useState({ member_id: '', member_search: '', monthly_amount: '100', registered_date: now.toISOString().split('T')[0], notes: '' });
+  const [subRegLoading, setSubRegLoading] = useState(false);
+  const [memberSearchResults, setMemberSearchResults] = useState<{ id: number; name: string; generation: number }[]>([]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -147,8 +168,16 @@ export default function FundPage() {
     } catch { }
   }, [statusYear, statusMonth]);
 
+  const loadSubscribers = useCallback(async () => {
+    try {
+      const res = await api.get('/fund/subscribers');
+      setSubscribers(res.data);
+    } catch { }
+  }, []);
+
   useEffect(() => { loadAll(); }, [loadAll]);
   useEffect(() => { loadMembersStatus(); }, [loadMembersStatus]);
+  useEffect(() => { loadSubscribers(); }, [loadSubscribers]);
 
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,6 +221,65 @@ export default function FundPage() {
     setUpdatingLoan(null);
   };
 
+  const handleMemberSearch = async (query: string) => {
+    setSubRegForm(f => ({ ...f, member_search: query, member_id: '' }));
+    if (query.length < 2) { setMemberSearchResults([]); return; }
+    try {
+      const res = await api.get(`/members/search/advanced?q=${encodeURIComponent(query)}&limit=8`);
+      setMemberSearchResults((res.data.members || []).slice(0, 8));
+    } catch { }
+  };
+
+  const handleAddSubscriber = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubRegLoading(true);
+    try {
+      await api.post('/fund/subscribers', {
+        member_id: parseInt(subRegForm.member_id),
+        monthly_amount: parseFloat(subRegForm.monthly_amount),
+        registered_date: subRegForm.registered_date,
+        notes: subRegForm.notes,
+      });
+      setShowAddSubscriber(false);
+      setSubRegForm({ member_id: '', member_search: '', monthly_amount: '100', registered_date: now.toISOString().split('T')[0], notes: '' });
+      setMemberSearchResults([]);
+      await loadSubscribers();
+      await loadMembersStatus();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'حدث خطأ');
+    }
+    setSubRegLoading(false);
+  };
+
+  const handleRemoveSubscriber = async (id: number) => {
+    if (!confirm('هل تريد إلغاء تسجيل هذا المشترك؟')) return;
+    try {
+      await api.delete(`/fund/subscribers/${id}`);
+      await loadSubscribers();
+      await loadMembersStatus();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'حدث خطأ');
+    }
+  };
+
+  const handleQuickPay = async (memberId: number, year: number, month: number) => {
+    const sub = subscribers.find(s => s.member_id === memberId);
+    const amount = sub ? sub.monthly_amount : 100;
+    try {
+      await api.post('/fund/subscriptions', {
+        member_id: memberId,
+        year,
+        month,
+        amount,
+        paid_date: new Date().toISOString().split('T')[0],
+      });
+      await loadMembersStatus();
+      await loadAll();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'حدث خطأ');
+    }
+  };
+
   if (loading) return <LoadingSpinner size="lg" />;
 
   const paidCount = membersStatus.filter(m => m.paid_amount).length;
@@ -231,6 +319,7 @@ export default function FundPage() {
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
         {([
           { id: 'overview', label: 'نظرة عامة' },
+          { id: 'subscribers', label: 'المشتركون' },
           { id: 'subscriptions', label: 'الاشتراكات' },
           { id: 'transactions', label: 'المعاملات' },
           { id: 'loans', label: 'القروض' },
@@ -297,6 +386,121 @@ export default function FundPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Subscribers Tab */}
+      {activeTab === 'subscribers' && (
+        <div className="space-y-4">
+          {isAdmin && (
+            <div className="flex justify-end">
+              <button onClick={() => setShowAddSubscriber(true)}
+                className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-medium cursor-pointer border-none">
+                + تسجيل مشترك
+              </button>
+            </div>
+          )}
+
+          {showAddSubscriber && isAdmin && (
+            <form onSubmit={handleAddSubscriber} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+              <h3 className="font-bold text-text">تسجيل مشترك جديد</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2 relative">
+                  <label className="block text-sm font-medium text-text mb-1">بحث عن عضو</label>
+                  <input type="text" value={subRegForm.member_search}
+                    onChange={e => handleMemberSearch(e.target.value)}
+                    placeholder="اكتب اسم العضو..."
+                    className="w-full px-3 py-2.5 bg-surface rounded-xl border-none text-sm" />
+                  {memberSearchResults.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                      {memberSearchResults.map(m => (
+                        <button key={m.id} type="button"
+                          onClick={() => {
+                            setSubRegForm(f => ({ ...f, member_id: String(m.id), member_search: m.name }));
+                            setMemberSearchResults([]);
+                          }}
+                          className="w-full text-right px-3 py-2 text-sm hover:bg-surface border-none bg-transparent cursor-pointer block">
+                          {m.name} <span className="text-xs text-text-secondary">جيل {m.generation}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {subRegForm.member_id && (
+                    <p className="text-xs text-green-600 mt-1">تم اختيار العضو (ID: {subRegForm.member_id})</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text mb-1">الاشتراك الشهري (ر.س)</label>
+                  <input type="number" value={subRegForm.monthly_amount}
+                    onChange={e => setSubRegForm({ ...subRegForm, monthly_amount: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-surface rounded-xl border-none text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text mb-1">تاريخ التسجيل</label>
+                  <input type="date" value={subRegForm.registered_date}
+                    onChange={e => setSubRegForm({ ...subRegForm, registered_date: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-surface rounded-xl border-none text-sm" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-text mb-1">ملاحظات (اختياري)</label>
+                  <input type="text" value={subRegForm.notes}
+                    onChange={e => setSubRegForm({ ...subRegForm, notes: e.target.value })}
+                    placeholder="..."
+                    className="w-full px-3 py-2.5 bg-surface rounded-xl border-none text-sm" />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button type="submit" disabled={subRegLoading || !subRegForm.member_id}
+                  className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-medium cursor-pointer border-none disabled:opacity-50">
+                  {subRegLoading ? 'جاري...' : 'تسجيل'}
+                </button>
+                <button type="button" onClick={() => { setShowAddSubscriber(false); setMemberSearchResults([]); }}
+                  className="px-5 py-2.5 bg-surface text-text rounded-xl text-sm font-medium cursor-pointer border-none">
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {subscribers.length === 0 ? (
+              <div className="p-8 text-center text-text-secondary text-sm">لا يوجد مشتركون مسجلون بعد</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-surface/50 border-b border-gray-100">
+                      <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">رمز المشترك</th>
+                      <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">الاسم</th>
+                      <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">الجيل</th>
+                      <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">الاشتراك الشهري</th>
+                      <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">تاريخ التسجيل</th>
+                      {isAdmin && <th className="px-4 py-3 text-center text-text-secondary font-medium text-xs">إجراء</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subscribers.map(s => (
+                      <tr key={s.id} className="border-b border-gray-50 hover:bg-surface/30">
+                        <td className="px-4 py-2.5 font-mono text-xs font-bold text-primary">{s.subscriber_code}</td>
+                        <td className="px-4 py-2.5 font-medium">{s.member_name}</td>
+                        <td className="px-4 py-2.5 text-text-secondary">{s.generation}</td>
+                        <td className="px-4 py-2.5 text-text-secondary">{formatAmount(s.monthly_amount)}</td>
+                        <td className="px-4 py-2.5 text-text-secondary">{s.registered_date}</td>
+                        {isAdmin && (
+                          <td className="px-4 py-2.5 text-center">
+                            <button onClick={() => handleRemoveSubscriber(s.id)}
+                              className="px-2 py-1 bg-red-50 text-red-600 rounded-lg text-xs cursor-pointer border-none hover:bg-red-100">
+                              إلغاء التسجيل
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -379,16 +583,19 @@ export default function FundPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-surface/50 border-b border-gray-100">
+                    <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">رمز المشترك</th>
                     <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">الاسم</th>
                     <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">الجيل</th>
                     <th className="px-4 py-3 text-center text-text-secondary font-medium text-xs">الحالة</th>
                     <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">المبلغ</th>
                     <th className="px-4 py-3 text-start text-text-secondary font-medium text-xs">تاريخ الدفع</th>
+                    {isAdmin && <th className="px-4 py-3 text-center text-text-secondary font-medium text-xs">دفع سريع</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {membersStatus.map(m => (
                     <tr key={m.id} className={`border-b border-gray-50 ${m.paid_amount ? '' : 'bg-red-50/30'}`}>
+                      <td className="px-4 py-2.5 font-mono text-xs font-bold text-primary">{m.subscriber_code || '—'}</td>
                       <td className="px-4 py-2.5 font-medium">{m.name}</td>
                       <td className="px-4 py-2.5 text-text-secondary">{m.generation}</td>
                       <td className="px-4 py-2.5 text-center">
@@ -398,10 +605,20 @@ export default function FundPage() {
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary">{m.paid_amount ? formatAmount(m.paid_amount) : '—'}</td>
                       <td className="px-4 py-2.5 text-text-secondary">{m.paid_date || '—'}</td>
+                      {isAdmin && (
+                        <td className="px-4 py-2.5 text-center">
+                          {!m.paid_amount && (
+                            <button onClick={() => handleQuickPay(m.id, statusYear, statusMonth)}
+                              className="px-2 py-1 bg-green-100 text-green-700 rounded-lg text-xs cursor-pointer border-none hover:bg-green-200">
+                              دفع
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                   {membersStatus.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-8 text-center text-text-secondary">لا توجد بيانات</td></tr>
+                    <tr><td colSpan={isAdmin ? 7 : 6} className="px-4 py-8 text-center text-text-secondary">لا توجد بيانات — سجّل المشتركين أولاً من تبويب "المشتركون"</td></tr>
                   )}
                 </tbody>
               </table>
