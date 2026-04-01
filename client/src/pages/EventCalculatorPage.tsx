@@ -232,32 +232,24 @@ function EventFormPanel({ initial, onSave, onCancel }: {
         </div>
       </div>
 
-      {/* Rate Preview */}
-      <div className="border-t border-gray-100 pt-4">
-        <h3 className="font-bold text-text mb-1">معاينة الأسعار</h3>
-        <p className="text-xs text-text-secondary mb-3">تقديرية — الأسعار الفعلية تُحسب بعد اختيار الحضور</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-green-50 rounded-xl border border-green-100">
-            <p className="text-xs text-green-600 font-medium mb-1">المشترك - بالغ</p>
-            <p className="text-lg font-black text-green-700">{fmt(subscriberRate)}</p>
-          </div>
-          <div className="p-3 bg-red-50 rounded-xl border border-red-100">
-            <p className="text-xs text-red-600 font-medium mb-1">غير المشترك - بالغ</p>
-            <p className="text-lg font-black text-red-700">{fmt(nonSubscriberRate)}</p>
-            {nonSubscriberRate <= subscriberRate && (
-              <p className="text-xs text-red-500 mt-1">⚠️ يجب أن يكون أعلى من المشترك</p>
-            )}
-          </div>
-          <div className="p-3 bg-green-50 rounded-xl border border-green-100">
-            <p className="text-xs text-green-600 font-medium mb-1">المشترك - صغير</p>
-            <p className="text-lg font-black text-green-700">{fmt(youngSubscriber)}</p>
-          </div>
-          <div className="p-3 bg-red-50 rounded-xl border border-red-100">
-            <p className="text-xs text-red-600 font-medium mb-1">غير المشترك - صغير</p>
-            <p className="text-lg font-black text-red-700">{fmt(youngNonSubscriber)}</p>
-          </div>
+      {/* Cost modifiers summary */}
+      {(exemptAmount > 0 || form.non_subscriber_surcharge > 0) && (
+        <div className="border-t border-gray-100 pt-4 space-y-2">
+          {exemptAmount > 0 && (
+            <div className="flex items-center gap-2 p-2.5 bg-green-50 rounded-xl text-xs text-green-700">
+              <span className="font-bold">✓ إعفاء المشتركين:</span>
+              <span>{fmt(exemptAmount)} من الإجمالي يتحملها الصندوق عنهم</span>
+            </div>
+          )}
+          {form.non_subscriber_surcharge > 0 && (
+            <div className="flex items-center gap-2 p-2.5 bg-orange-50 rounded-xl text-xs text-orange-700">
+              <span className="font-bold">+ رسوم غير المشتركين:</span>
+              <span>{fmt(form.non_subscriber_surcharge)} إضافية على كل فرد غير مشترك</span>
+            </div>
+          )}
+          <p className="text-xs text-text-secondary text-center">نصيب كل فرد = الإجمالي ÷ عدد الحضور، يُحسب بعد اختيار أرباب الأسر</p>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-3 pt-2 border-t border-gray-100">
         <button type="button" onClick={() => onSave(form)}

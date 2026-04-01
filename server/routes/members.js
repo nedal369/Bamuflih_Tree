@@ -27,10 +27,23 @@ function buildTree(members, parentId = null) {
     }));
 }
 
+// Helper: get subscriber IDs set (from fund_subscriber_registrations OR users.is_fund_subscriber)
+function getSubscriberIds() {
+  const rows = db.prepare(`
+    SELECT m.id FROM members m
+    LEFT JOIN fund_subscriber_registrations fsr ON fsr.member_id = m.id
+    LEFT JOIN users u ON u.member_id = m.id AND u.status = 'approved'
+    WHERE fsr.id IS NOT NULL OR u.is_fund_subscriber = 1
+  `).all();
+  return new Set(rows.map(r => r.id));
+}
+
 // Get all members (flat or tree)
 router.get('/', (req, res) => {
   const members = db.prepare('SELECT * FROM members ORDER BY generation, name').all();
-  const withMarriages = attachMarriages(members);
+  const subscriberIds = getSubscriberIds();
+  const enriched = members.map(m => ({ ...m, is_fund_subscriber: subscriberIds.has(m.id) }));
+  const withMarriages = attachMarriages(enriched);
 
   if (req.query.format === 'tree') {
     const tree = buildTree(withMarriages);
@@ -413,7 +426,9 @@ router.get('/:id/subtree', (req, res) => {
     return res.status(404).json({ error: 'العضو غير موجود' });
   }
 
-  const allMembers = attachMarriages(db.prepare('SELECT * FROM members').all());
+  const subscriberIds = getSubscriberIds();
+  const rawMembers = db.prepare('SELECT * FROM members').all().map(m => ({ ...m, is_fund_subscriber: subscriberIds.has(m.id) }));
+  const allMembers = attachMarriages(rawMembers);
 
   function getDescendants(parentId) {
     return allMembers

@@ -22,6 +22,7 @@ export interface Member {
   family_id: number | null;
   family_name?: string;
   generation: number;
+  is_fund_subscriber?: boolean;
   marriages?: Marriage[];
   created_at: string;
   updated_at: string;

@@ -782,7 +782,8 @@ router.post('/events/:id/calculate-families', authenticateToken, (req, res) => {
     if (!head || head.death_date) continue;
 
     const user = db.prepare("SELECT is_fund_subscriber FROM users WHERE member_id = ? AND status = 'approved'").get(headId);
-    const isSubscriber = user ? !!user.is_fund_subscriber : false;
+    const subReg = db.prepare('SELECT id FROM fund_subscriber_registrations WHERE member_id = ?').get(headId);
+    const isSubscriber = !!(subReg || (user && user.is_fund_subscriber));
 
     // Use buildFamily with all selected IDs for deduplication
     const family = buildFamily(headId, family_head_ids, childAgeMax, youngAgeMax);

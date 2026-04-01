@@ -162,6 +162,9 @@ export default function PersonPage() {
           <div className="flex-1">
             <div className="flex items-center gap-2 sm:gap-3 mb-2 flex-wrap justify-center sm:justify-start">
               <h1 className="text-xl sm:text-2xl font-bold text-text m-0">{member.name}</h1>
+              {member.is_fund_subscriber && (
+                <span className="text-sm bg-green-100 text-green-700 px-2 py-0.5 rounded-lg font-medium">★ مشترك في الصندوق</span>
+              )}
               {member.death_date && <span className="text-sm bg-gray-100 px-2 py-0.5 rounded-lg text-gray-500">متوفى 🕊️</span>}
               {age && (
                 <span className="text-sm bg-primary/10 text-primary px-3 py-1 rounded-xl font-medium">
