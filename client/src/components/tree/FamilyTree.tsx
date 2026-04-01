@@ -6,7 +6,11 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import Modal from '../common/Modal';
 import SubTreeView from './SubTreeView';
 
-export default function FamilyTree() {
+interface FamilyTreeProps {
+  onSelect?: (id: number, name: string) => void;
+}
+
+export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
@@ -153,14 +157,24 @@ export default function FamilyTree() {
       .attr('fill', d => d.data.death_date ? '#F9F9F9' : 'white')
       .attr('stroke', d => {
         if (searchQuery && d.data.name.includes(searchQuery)) return '#FF9500';
+        if (d.data.is_fund_subscriber) return '#34C759';
         return genColors[(d.data.generation || 0) % genColors.length];
       })
-      .attr('stroke-width', d => (searchQuery && d.data.name.includes(searchQuery)) ? 3 : 1.5)
+      .attr('stroke-width', d => {
+        if (searchQuery && d.data.name.includes(searchQuery)) return 3;
+        if (d.data.is_fund_subscriber) return 2.5;
+        return 1.5;
+      })
       .attr('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.06))')
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
         event.stopPropagation();
-        if (d.data.id !== 0) handleNodeClick(d.data.id);
+        if (d.data.id === 0) return;
+        if (onSelect) {
+          onSelect(d.data.id, d.data.name);
+        } else {
+          handleNodeClick(d.data.id);
+        }
       });
 
     // Deceased icon
@@ -234,6 +248,18 @@ export default function FamilyTree() {
         .attr('fill', '#86868B')
         .style('pointer-events', 'none')
         .text(d.data.generation ? `الجيل ${d.data.generation}` : '');
+
+      // Subscriber star badge
+      if (d.data.is_fund_subscriber) {
+        node.append('text')
+          .attr('x', cardW / 2 - 8)
+          .attr('y', -cardH / 2 + 16)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '12px')
+          .attr('fill', '#34C759')
+          .style('pointer-events', 'none')
+          .text('★');
+      }
     });
 
     // Draw wives beside husbands
@@ -382,7 +408,7 @@ export default function FamilyTree() {
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-6 text-center">
           <h1 className="text-xl sm:text-3xl font-black text-text mb-1 sm:mb-2">شجرة عائلة آل بامفلح</h1>
-          <p className="text-text-secondary text-xs sm:text-sm mb-3 sm:mb-4">اضغط على أي شخص لعرض شجرته الخاصة وتفاصيله</p>
+          <p className="text-text-secondary text-xs sm:text-sm mb-3 sm:mb-4">{onSelect ? 'اضغط على أي شخص لاختياره' : 'اضغط على أي شخص لعرض شجرته الخاصة وتفاصيله'}</p>
           <div className="max-w-md mx-auto relative">
             <input
               type="text"
@@ -412,6 +438,7 @@ export default function FamilyTree() {
           <div className="flex items-center gap-2"><span>🕊️</span><span className="text-text-secondary">متوفى</span></div>
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-pink-500 inline-block"></span><span className="text-text-secondary">زوجة</span></div>
           <div className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-300 inline-block" style={{borderTop: '1px dashed #ccc'}}></span><span className="text-text-secondary">مطلقة</span></div>
+          <div className="flex items-center gap-2"><span className="text-green-500 font-bold">★</span><span className="text-text-secondary">مشترك في الصندوق</span></div>
         </div>
       </div>
 

@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import Modal from '../components/common/Modal';
+import FamilyTree from '../components/tree/FamilyTree';
 
 const api = axios.create({ baseURL: '/api' });
 api.interceptors.request.use((config) => {
@@ -145,6 +147,7 @@ export default function FundPage() {
   const [subRegForm, setSubRegForm] = useState({ member_id: '', member_search: '', monthly_amount: '100', registered_date: now.toISOString().split('T')[0], notes: '' });
   const [subRegLoading, setSubRegLoading] = useState(false);
   const [memberSearchResults, setMemberSearchResults] = useState<{ id: number; name: string; generation: number }[]>([]);
+  const [showTreePicker, setShowTreePicker] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -429,8 +432,12 @@ export default function FundPage() {
                     </div>
                   )}
                   {subRegForm.member_id && (
-                    <p className="text-xs text-green-600 mt-1">تم اختيار العضو (ID: {subRegForm.member_id})</p>
+                    <p className="text-xs text-green-600 mt-1">✓ تم اختيار: {subRegForm.member_search}</p>
                   )}
+                  <button type="button" onClick={() => setShowTreePicker(true)}
+                    className="mt-2 w-full px-3 py-2 bg-surface text-text-secondary rounded-xl text-sm cursor-pointer border border-dashed border-gray-300 hover:bg-gray-100 transition-colors">
+                    🌳 أو اختر من الشجرة العائلية
+                  </button>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-text mb-1">الاشتراك الشهري (ر.س)</label>
@@ -781,6 +788,15 @@ export default function FundPage() {
           )}
         </div>
       )}
+
+      {/* Tree Picker Modal */}
+      <Modal isOpen={showTreePicker} onClose={() => setShowTreePicker(false)} title="اختر عضوًا من الشجرة" size="full">
+        <FamilyTree onSelect={(id, name) => {
+          setSubRegForm(f => ({ ...f, member_id: String(id), member_search: name }));
+          setMemberSearchResults([]);
+          setShowTreePicker(false);
+        }} />
+      </Modal>
     </div>
   );
 }
