@@ -11,6 +11,7 @@ import RelationshipPage from './pages/RelationshipPage';
 import NotificationsPage from './pages/NotificationsPage';
 import FundPage from './pages/FundPage';
 import EventCalculatorPage from './pages/EventCalculatorPage';
+import GeneralTreePage from './pages/GeneralTreePage';
 import type { ReactNode } from 'react';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -32,6 +33,11 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<AdminLogin />} />
+          {/* General Tree - accessible without authentication */}
+          <Route path="/general-tree" element={<Layout />}>
+            <Route index element={<GeneralTreePage />} />
+            <Route path=":familyId" element={<GeneralTreePage />} />
+          </Route>
           <Route element={<RequireAuth><Layout /></RequireAuth>}>
             <Route path="/" element={<TreePage />} />
             <Route path="/person/:id" element={<PersonPage />} />

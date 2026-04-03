@@ -12,6 +12,7 @@ const notificationRoutes = require('./routes/notifications');
 const activityLogRoutes = require('./routes/activityLog');
 const familyRoutes = require('./routes/families');
 const fundRoutes = require('./routes/fund');
+const generalTreeRoutes = require('./routes/general-tree');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/activity-log', activityLogRoutes);
 app.use('/api/families', familyRoutes);
 app.use('/api/fund', fundRoutes);
+app.use('/api/general-tree', generalTreeRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
