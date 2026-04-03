@@ -113,8 +113,6 @@ function EventFormPanel({ initial, onSave, onCancel }: {
   }, 0);
   const subscriberRate = totalCost - exemptAmount;
   const nonSubscriberRate = totalCost + form.non_subscriber_surcharge;
-  const youngSubscriber = subscriberRate * form.young_cost_multiplier;
-  const youngNonSubscriber = nonSubscriberRate * form.young_cost_multiplier;
 
   const toggleExemption = (key: string) => {
     setForm(f => ({
