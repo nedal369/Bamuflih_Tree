@@ -202,6 +202,63 @@ export interface EventReport {
   families: EventFamily[];
 }
 
+// General Family Tree types (independent from main tree)
+export interface GeneralFamily {
+  id: number;
+  name: string;
+  description: string | null;
+  source_filename: string | null;
+  member_count: number;
+  uploaded_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GeneralMember {
+  id: number;
+  family_id: number;
+  gedcom_id: string | null;
+  name: string;
+  father_id: number | null;
+  mother_id: number | null;
+  gender: 'male' | 'female';
+  birth_date: string | null;
+  death_date: string | null;
+  bio: string | null;
+  phone: string | null;
+  mother_name: string | null;
+  city: string | null;
+  nationality: string | null;
+  occupation: string | null;
+  work_type: string | null;
+  work_place: string | null;
+  generation: number;
+  marriages?: GeneralMarriage[];
+  father?: { id: number; name: string } | null;
+  mother?: { id: number; name: string } | null;
+  children?: { id: number; name: string; gender: string; birth_date: string | null; death_date: string | null }[];
+  created_at: string;
+}
+
+export interface GeneralMarriage {
+  id: number;
+  family_id: number;
+  husband_id: number;
+  wife_id: number | null;
+  wife_name: string | null;
+  status: 'married' | 'divorced' | 'widowed' | 'deceased';
+  marriage_order: number;
+}
+
+export interface GeneralTreeNode extends GeneralMember {
+  children: GeneralTreeNode[];
+}
+
+export interface GeneralTreeResponse {
+  family: GeneralFamily;
+  tree: GeneralTreeNode[];
+}
+
 export interface ExcelUploadResponse {
   message: string;
   data: Record<string, string>[];

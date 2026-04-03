@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage, RelationshipResult, SearchResult, FamilyHead, EventReport } from '../types';
+import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage, RelationshipResult, SearchResult, FamilyHead, EventReport, GeneralFamily, GeneralTreeResponse, GeneralMember } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -12,7 +12,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !error.config?.url?.startsWith('/general-tree')) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -202,5 +202,34 @@ export const calculateFamilies = (eventId: number, familyHeadIds: number[]) =>
 
 export const getEventReport = (eventId: number) =>
   api.get<EventReport>(`/fund/events/${eventId}/report`).then(r => r.data);
+
+// General Tree (independent - public read, admin write)
+export const getGeneralFamilies = () =>
+  api.get<GeneralFamily[]>('/general-tree/families').then(r => r.data);
+
+export const getGeneralFamilyTree = (familyId: number) =>
+  api.get<GeneralTreeResponse>(`/general-tree/families/${familyId}/tree`).then(r => r.data);
+
+export const getGeneralFamilyMembers = (familyId: number) =>
+  api.get<GeneralMember[]>(`/general-tree/families/${familyId}/members`).then(r => r.data);
+
+export const getGeneralMember = (id: number) =>
+  api.get<GeneralMember>(`/general-tree/members/${id}`).then(r => r.data);
+
+export const importGeneralTreeGedcom = (file: File, name: string, description?: string) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('name', name);
+  if (description) formData.append('description', description);
+  return api.post('/general-tree/families/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+
+export const updateGeneralFamily = (id: number, data: { name?: string; description?: string }) =>
+  api.put(`/general-tree/families/${id}`, data).then(r => r.data);
+
+export const deleteGeneralFamily = (id: number) =>
+  api.delete(`/general-tree/families/${id}`).then(r => r.data);
 
 export default api;
