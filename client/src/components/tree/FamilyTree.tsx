@@ -10,6 +10,16 @@ interface FamilyTreeProps {
   onSelect?: (id: number, name: string) => void;
 }
 
+// Find a node by ID in a tree
+function findNodeInTree(tree: TreeNode, id: number): TreeNode | null {
+  if (tree.id === id) return tree;
+  for (const child of tree.children || []) {
+    const found = findNodeInTree(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
 export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -18,6 +28,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMember, setSelectedMember] = useState<SubtreeResponse | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [focusedNodeId, setFocusedNodeId] = useState<number | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
   const loadTree = useCallback(async () => {
@@ -69,10 +80,26 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
     zoomRef.current = zoom;
     svg.call(zoom);
 
-    // Use first root or create virtual root
-    const rootData = treeData.length === 1 ? treeData[0] : {
-      id: 0, name: 'آل بامفلح', children: treeData, gender: 'male' as const, generation: 0, marriages: [] as Marriage[],
-    };
+    // Disable D3's default double-click zoom
+    svg.on('dblclick.zoom', null);
+
+    // Click on empty background to reset focus
+    svg.on('click', (event) => {
+      if (event.target === svgRef.current) {
+        if (focusedNodeId !== null) {
+          setFocusedNodeId(null);
+        }
+      }
+    });
+
+    // Use the actual root person (backend now returns single root)
+    const fullRootData = treeData[0];
+    if (!fullRootData) return;
+
+    // If focused on a specific person, show only their subtree
+    const rootData = focusedNodeId
+      ? findNodeInTree(fullRootData, focusedNodeId) || fullRootData
+      : fullRootData;
 
     const root = d3.hierarchy(rootData as TreeNode, d => d.children);
 
@@ -107,7 +134,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
 
     const genColors = ['#6366F1', '#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#5AC8FA', '#FF2D55'];
 
-    // Draw links
+    // Draw links - dashed for through_mother connections
     g.selectAll('.link')
       .data(root.links())
       .join('path')
@@ -120,8 +147,9 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
         const my = (sy + ty) / 2;
         return `M${sx},${sy} C${sx},${my} ${tx},${my} ${tx},${ty}`;
       })
-      .attr('stroke', '#D1D1D6')
+      .attr('stroke', d => (d.target.data as TreeNode).through_mother ? '#FF2D55' : '#D1D1D6')
       .attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', d => (d.target.data as TreeNode).through_mother ? '6,3' : 'none')
       .attr('fill', 'none')
       .attr('opacity', 0)
       .transition()
@@ -154,9 +182,13 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       .attr('width', cardW)
       .attr('height', cardH)
       .attr('rx', 14)
-      .attr('fill', d => d.data.death_date ? '#F9F9F9' : 'white')
+      .attr('fill', d => {
+        if (d.data.through_mother) return '#FFF5F7';
+        return d.data.death_date ? '#F9F9F9' : 'white';
+      })
       .attr('stroke', d => {
         if (searchQuery && d.data.name.includes(searchQuery)) return '#FF9500';
+        if (d.data.through_mother) return '#FF2D55';
         if (d.data.is_fund_subscriber) return '#34C759';
         return genColors[(d.data.generation || 0) % genColors.length];
       })
@@ -165,15 +197,22 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
         if (d.data.is_fund_subscriber) return 2.5;
         return 1.5;
       })
+      .attr('stroke-dasharray', d => d.data.through_mother ? '4,2' : 'none')
       .attr('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.06))')
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
         event.stopPropagation();
-        if (d.data.id === 0) return;
         if (onSelect) {
           onSelect(d.data.id, d.data.name);
         } else {
           handleNodeClick(d.data.id);
+        }
+      })
+      .on('dblclick', (event, d) => {
+        event.stopPropagation();
+        // Double-click: zoom into this person's subtree
+        if (d.data.children && d.data.children.length > 0) {
+          setFocusedNodeId(d.data.id);
         }
       });
 
@@ -392,12 +431,16 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
         );
       }
     }
-  }, [treeData, searchQuery]);
+  }, [treeData, searchQuery, focusedNodeId]);
 
   const handleZoom = (factor: number) => {
     if (!svgRef.current || !zoomRef.current) return;
     const svg = d3.select(svgRef.current);
     svg.transition().duration(300).call(zoomRef.current.scaleBy, factor);
+  };
+
+  const handleResetFocus = () => {
+    setFocusedNodeId(null);
   };
 
   if (loading) return <LoadingSpinner size="lg" />;
@@ -408,7 +451,9 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-6 text-center">
           <h1 className="text-xl sm:text-3xl font-black text-text mb-1 sm:mb-2">شجرة عائلة آل بامفلح</h1>
-          <p className="text-text-secondary text-xs sm:text-sm mb-3 sm:mb-4">{onSelect ? 'اضغط على أي شخص لاختياره' : 'اضغط على أي شخص لعرض شجرته الخاصة وتفاصيله'}</p>
+          <p className="text-text-secondary text-xs sm:text-sm mb-3 sm:mb-4">
+            {onSelect ? 'اضغط على أي شخص لاختياره' : 'اضغط مرتين على أي شخص للتقريب على شجرته - اضغط على الفراغ للعودة'}
+          </p>
           <div className="max-w-md mx-auto relative">
             <input
               type="text"
@@ -428,6 +473,20 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       {/* Tree Container */}
       <div ref={containerRef} className="flex-1 bg-surface overflow-hidden relative">
         <svg ref={svgRef} className="w-full h-full" />
+
+        {/* Back to full tree button - shown when focused on a subtree */}
+        {focusedNodeId !== null && (
+          <button
+            onClick={handleResetFocus}
+            className="absolute top-4 right-4 px-4 py-2 bg-primary text-white rounded-xl shadow-lg text-sm font-medium hover:bg-primary-dark transition-colors cursor-pointer border-none flex items-center gap-2 z-10"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            عرض الشجرة الكاملة
+          </button>
+        )}
+
         {/* Zoom controls */}
         <div className="absolute bottom-20 md:bottom-6 left-4 md:left-6 flex flex-col gap-2 z-10">
           <button onClick={() => handleZoom(1.3)} className="w-11 h-11 bg-white rounded-xl shadow-lg flex items-center justify-center text-text hover:bg-gray-50 transition-colors cursor-pointer border-none text-lg font-bold active:bg-gray-100">+</button>
@@ -439,6 +498,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-pink-500 inline-block"></span><span className="text-text-secondary">زوجة</span></div>
           <div className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-300 inline-block" style={{borderTop: '1px dashed #ccc'}}></span><span className="text-text-secondary">مطلقة</span></div>
           <div className="flex items-center gap-2"><span className="text-green-500 font-bold">★</span><span className="text-text-secondary">مشترك في الصندوق</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-0.5 bg-pink-400 inline-block" style={{borderTop: '2px dashed #FF2D55'}}></span><span className="text-text-secondary">أبناء البنات</span></div>
         </div>
       </div>
 
