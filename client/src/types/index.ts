@@ -40,6 +40,7 @@ export interface Marriage {
 export interface TreeNode extends Member {
   children: TreeNode[];
   marriages?: Marriage[];
+  through_mother?: boolean;
 }
 
 export interface SubtreeResponse {
