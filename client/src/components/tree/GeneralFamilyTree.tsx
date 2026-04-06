@@ -1,46 +1,35 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
-import { getMembersTree, getMemberSubtree } from '../../services/api';
-import type { TreeNode, SubtreeResponse, Marriage } from '../../types';
+import { getGeneralFamilyTree, getGeneralMember } from '../../services/api';
+import type { GeneralTreeNode, GeneralMarriage, GeneralMember } from '../../types';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Modal from '../common/Modal';
-import SubTreeView from './SubTreeView';
 
-interface FamilyTreeProps {
-  onSelect?: (id: number, name: string) => void;
+interface GeneralFamilyTreeProps {
+  familyId: number;
+  familyName: string;
 }
 
-// Find a node by ID in a tree
-function findNodeInTree(tree: TreeNode, id: number): TreeNode | null {
-  if (tree.id === id) return tree;
-  for (const child of tree.children || []) {
-    const found = findNodeInTree(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-
-export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
+export default function GeneralFamilyTree({ familyId, familyName }: GeneralFamilyTreeProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
-  const [treeData, setTreeData] = useState<TreeNode[]>([]);
+  const [treeData, setTreeData] = useState<GeneralTreeNode[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMember, setSelectedMember] = useState<SubtreeResponse | null>(null);
+  const [selectedMember, setSelectedMember] = useState<GeneralMember | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [focusedNodeId, setFocusedNodeId] = useState<number | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
   const loadTree = useCallback(async () => {
     try {
-      const data = await getMembersTree();
-      setTreeData(data);
+      const data = await getGeneralFamilyTree(familyId);
+      setTreeData(data.tree);
     } catch (err) {
-      console.error('Error loading tree:', err);
+      console.error('Error loading general tree:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [familyId]);
 
   useEffect(() => {
     loadTree();
@@ -48,11 +37,11 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
 
   const handleNodeClick = async (memberId: number) => {
     try {
-      const subtree = await getMemberSubtree(memberId);
-      setSelectedMember(subtree);
+      const member = await getGeneralMember(memberId);
+      setSelectedMember(member);
       setShowModal(true);
     } catch (err) {
-      console.error('Error loading subtree:', err);
+      console.error('Error loading member:', err);
     }
   };
 
@@ -80,33 +69,20 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
     zoomRef.current = zoom;
     svg.call(zoom);
 
-    // Disable D3's default double-click zoom
-    svg.on('dblclick.zoom', null);
+    // Use first root or create virtual root
+    const rootData = treeData.length === 1 ? treeData[0] : {
+      id: 0, name: familyName, children: treeData, gender: 'male' as const, generation: 0, marriages: [] as GeneralMarriage[],
+      family_id: familyId, father_id: null, mother_id: null, gedcom_id: null,
+      birth_date: null, death_date: null, bio: null, phone: null, mother_name: null,
+      city: null, nationality: null, occupation: null, work_type: null, work_place: null, created_at: '',
+    };
 
-    // Click on empty background to reset focus
-    svg.on('click', (event) => {
-      if (event.target === svgRef.current) {
-        if (focusedNodeId !== null) {
-          setFocusedNodeId(null);
-        }
-      }
-    });
-
-    // Use the actual root person (backend now returns single root)
-    const fullRootData = treeData[0];
-    if (!fullRootData) return;
-
-    // If focused on a specific person, show only their subtree
-    const rootData = focusedNodeId
-      ? findNodeInTree(fullRootData, focusedNodeId) || fullRootData
-      : fullRootData;
-
-    const root = d3.hierarchy(rootData as TreeNode, d => d.children);
+    const root = d3.hierarchy(rootData as GeneralTreeNode, d => d.children);
 
     const nodeWidth = 260;
     const nodeHeight = 150;
 
-    const treeLayout = d3.tree<TreeNode>()
+    const treeLayout = d3.tree<GeneralTreeNode>()
       .nodeSize([nodeWidth, nodeHeight])
       .separation((a, b) => {
         const aWives = (a.data.marriages?.length || 0);
@@ -134,7 +110,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
 
     const genColors = ['#6366F1', '#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#5AC8FA', '#FF2D55'];
 
-    // Draw links - dashed for through_mother connections
+    // Draw links
     g.selectAll('.link')
       .data(root.links())
       .join('path')
@@ -147,9 +123,8 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
         const my = (sy + ty) / 2;
         return `M${sx},${sy} C${sx},${my} ${tx},${my} ${tx},${ty}`;
       })
-      .attr('stroke', d => (d.target.data as TreeNode).through_mother ? '#FF2D55' : '#D1D1D6')
+      .attr('stroke', '#D1D1D6')
       .attr('stroke-width', 1.5)
-      .attr('stroke-dasharray', d => (d.target.data as TreeNode).through_mother ? '6,3' : 'none')
       .attr('fill', 'none')
       .attr('opacity', 0)
       .transition()
@@ -170,11 +145,10 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       .delay((_: unknown, i: number) => i * 30)
       .attr('opacity', 1);
 
-    // Main member card
     const cardW = 200;
     const cardH = 70;
 
-    // Card background - clickable area
+    // Card background
     nodes.append('rect')
       .attr('class', 'node-card')
       .attr('x', -cardW / 2)
@@ -182,38 +156,21 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       .attr('width', cardW)
       .attr('height', cardH)
       .attr('rx', 14)
-      .attr('fill', d => {
-        if (d.data.through_mother) return '#FFF5F7';
-        return d.data.death_date ? '#F9F9F9' : 'white';
-      })
+      .attr('fill', d => d.data.death_date ? '#F9F9F9' : 'white')
       .attr('stroke', d => {
         if (searchQuery && d.data.name.includes(searchQuery)) return '#FF9500';
-        if (d.data.through_mother) return '#FF2D55';
-        if (d.data.is_fund_subscriber) return '#34C759';
         return genColors[(d.data.generation || 0) % genColors.length];
       })
       .attr('stroke-width', d => {
         if (searchQuery && d.data.name.includes(searchQuery)) return 3;
-        if (d.data.is_fund_subscriber) return 2.5;
         return 1.5;
       })
-      .attr('stroke-dasharray', d => d.data.through_mother ? '4,2' : 'none')
       .attr('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.06))')
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
         event.stopPropagation();
-        if (onSelect) {
-          onSelect(d.data.id, d.data.name);
-        } else {
-          handleNodeClick(d.data.id);
-        }
-      })
-      .on('dblclick', (event, d) => {
-        event.stopPropagation();
-        // Double-click: zoom into this person's subtree
-        if (d.data.children && d.data.children.length > 0) {
-          setFocusedNodeId(d.data.id);
-        }
+        if (d.data.id === 0) return;
+        handleNodeClick(d.data.id);
       });
 
     // Deceased icon
@@ -223,7 +180,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       .attr('y', -cardH / 2 + 18)
       .attr('text-anchor', 'middle')
       .attr('font-size', '14px')
-      .text('🕊️');
+      .text('\u{1F54A}\u{FE0F}');
 
     // Gender indicator
     nodes.append('circle')
@@ -239,11 +196,11 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       .attr('y', -1)
       .attr('text-anchor', 'middle')
       .attr('font-size', '12px')
-      .text(d => d.data.gender === 'female' ? '♀' : '♂')
+      .text(d => d.data.gender === 'female' ? '\u2640' : '\u2642')
       .attr('fill', d => d.data.gender === 'female' ? '#FF2D55' : '#007AFF')
       .style('pointer-events', 'none');
 
-    // Full name - wrap text
+    // Name text wrapping
     nodes.each(function(d) {
       const node = d3.select(this);
       const name = d.data.name;
@@ -286,19 +243,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
         .attr('font-size', '9px')
         .attr('fill', '#86868B')
         .style('pointer-events', 'none')
-        .text(d.data.generation ? `الجيل ${d.data.generation}` : '');
-
-      // Subscriber star badge
-      if (d.data.is_fund_subscriber) {
-        node.append('text')
-          .attr('x', cardW / 2 - 8)
-          .attr('y', -cardH / 2 + 16)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '12px')
-          .attr('fill', '#34C759')
-          .style('pointer-events', 'none')
-          .text('★');
-      }
+        .text(d.data.generation ? `\u0627\u0644\u062C\u064A\u0644 ${d.data.generation}` : '');
     });
 
     // Draw wives beside husbands
@@ -306,7 +251,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       if (!d.data.marriages || d.data.marriages.length === 0) return;
       const node = d3.select(this);
 
-      d.data.marriages.forEach((marriage: Marriage, i: number) => {
+      d.data.marriages.forEach((marriage: GeneralMarriage, i: number) => {
         const wifeX = -(cardW / 2 + 20 + (i * (cardW * 0.7 + 10)) + cardW * 0.7 / 2);
         const wifeW = cardW * 0.7;
         const wifeH = 50;
@@ -340,7 +285,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
           .attr('font-size', '8px')
           .attr('fill', 'white')
           .style('pointer-events', 'none')
-          .text(isDivorced ? '✕' : '♥');
+          .text(isDivorced ? '\u2715' : '\u2665');
 
         // Wife card
         node.append('rect')
@@ -362,11 +307,11 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
             .attr('y', -wifeH / 2 + 16)
             .attr('text-anchor', 'middle')
             .attr('font-size', '11px')
-            .text('🕊️');
+            .text('\u{1F54A}\u{FE0F}');
         }
 
         // Wife name
-        const wifeName = marriage.wife_name || 'زوجة';
+        const wifeName = marriage.wife_name || '\u0632\u0648\u062C\u0629';
         const wWords = wifeName.split(' ');
         let wLines: string[] = [];
         let wCurrent = '';
@@ -393,7 +338,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
         });
 
         // Status label
-        const statusLabels: Record<string, string> = { married: 'متزوج', divorced: 'مطلق', widowed: 'أرمل', deceased: 'متوفاة' };
+        const statusLabels: Record<string, string> = { married: '\u0645\u062A\u0632\u0648\u062C', divorced: '\u0645\u0637\u0644\u0642', widowed: '\u0623\u0631\u0645\u0644', deceased: '\u0645\u062A\u0648\u0641\u0627\u0629' };
         node.append('text')
           .attr('x', wifeX + wifeW / 2)
           .attr('y', wifeH / 2 - 5)
@@ -406,7 +351,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       });
     });
 
-    // Hover effects on card
+    // Hover effects
     nodes.selectAll('.node-card')
       .on('mouseenter', function () {
         d3.select(this)
@@ -431,7 +376,7 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
         );
       }
     }
-  }, [treeData, searchQuery, focusedNodeId]);
+  }, [treeData, searchQuery, familyId, familyName]);
 
   const handleZoom = (factor: number) => {
     if (!svgRef.current || !zoomRef.current) return;
@@ -439,25 +384,17 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
     svg.transition().duration(300).call(zoomRef.current.scaleBy, factor);
   };
 
-  const handleResetFocus = () => {
-    setFocusedNodeId(null);
-  };
-
   if (loading) return <LoadingSpinner size="lg" />;
 
   return (
     <div className="h-[100dvh] md:h-screen flex flex-col pb-16 md:pb-0">
-      {/* Hero Section */}
+      {/* Search */}
       <div className="bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-6 text-center">
-          <h1 className="text-xl sm:text-3xl font-black text-text mb-1 sm:mb-2">شجرة عائلة آل بامفلح</h1>
-          <p className="text-text-secondary text-xs sm:text-sm mb-3 sm:mb-4">
-            {onSelect ? 'اضغط على أي شخص لاختياره' : 'اضغط مرتين على أي شخص للتقريب على شجرته - اضغط على الفراغ للعودة'}
-          </p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 text-center">
           <div className="max-w-md mx-auto relative">
             <input
               type="text"
-              placeholder="ابحث عن اسم..."
+              placeholder="\u0627\u0628\u062D\u062B \u0639\u0646 \u0627\u0633\u0645..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full px-5 py-2.5 pr-12 rounded-full bg-surface border-none text-text placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
@@ -473,44 +410,128 @@ export default function FamilyTree({ onSelect }: FamilyTreeProps = {}) {
       {/* Tree Container */}
       <div ref={containerRef} className="flex-1 bg-surface overflow-hidden relative">
         <svg ref={svgRef} className="w-full h-full" />
-
-        {/* Back to full tree button - shown when focused on a subtree */}
-        {focusedNodeId !== null && (
-          <button
-            onClick={handleResetFocus}
-            className="absolute top-4 right-4 px-4 py-2 bg-primary text-white rounded-xl shadow-lg text-sm font-medium hover:bg-primary-dark transition-colors cursor-pointer border-none flex items-center gap-2 z-10"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            عرض الشجرة الكاملة
-          </button>
-        )}
-
         {/* Zoom controls */}
         <div className="absolute bottom-20 md:bottom-6 left-4 md:left-6 flex flex-col gap-2 z-10">
           <button onClick={() => handleZoom(1.3)} className="w-11 h-11 bg-white rounded-xl shadow-lg flex items-center justify-center text-text hover:bg-gray-50 transition-colors cursor-pointer border-none text-lg font-bold active:bg-gray-100">+</button>
-          <button onClick={() => handleZoom(0.7)} className="w-11 h-11 bg-white rounded-xl shadow-lg flex items-center justify-center text-text hover:bg-gray-50 transition-colors cursor-pointer border-none text-lg font-bold active:bg-gray-100">−</button>
+          <button onClick={() => handleZoom(0.7)} className="w-11 h-11 bg-white rounded-xl shadow-lg flex items-center justify-center text-text hover:bg-gray-50 transition-colors cursor-pointer border-none text-lg font-bold active:bg-gray-100">&minus;</button>
         </div>
         {/* Legend */}
         <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-xl p-3 text-xs space-y-1.5 shadow-sm hidden sm:block">
-          <div className="flex items-center gap-2"><span>🕊️</span><span className="text-text-secondary">متوفى</span></div>
-          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-pink-500 inline-block"></span><span className="text-text-secondary">زوجة</span></div>
-          <div className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-300 inline-block" style={{borderTop: '1px dashed #ccc'}}></span><span className="text-text-secondary">مطلقة</span></div>
-          <div className="flex items-center gap-2"><span className="text-green-500 font-bold">★</span><span className="text-text-secondary">مشترك في الصندوق</span></div>
-          <div className="flex items-center gap-2"><span className="w-3 h-0.5 bg-pink-400 inline-block" style={{borderTop: '2px dashed #FF2D55'}}></span><span className="text-text-secondary">أبناء البنات</span></div>
+          <div className="flex items-center gap-2"><span>{'\u{1F54A}\u{FE0F}'}</span><span className="text-text-secondary">{'\u0645\u062A\u0648\u0641\u0649'}</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-pink-500 inline-block"></span><span className="text-text-secondary">{'\u0632\u0648\u062C\u0629'}</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-300 inline-block" style={{borderTop: '1px dashed #ccc'}}></span><span className="text-text-secondary">{'\u0645\u0637\u0644\u0642\u0629'}</span></div>
         </div>
       </div>
 
-      {/* Subtree Modal */}
+      {/* Member Details Modal */}
       <Modal
         isOpen={showModal}
         onClose={() => { setShowModal(false); setSelectedMember(null); }}
-        title={selectedMember?.member.name}
-        size="full"
+        title={selectedMember?.name}
+        size="md"
       >
         {selectedMember && (
-          <SubTreeView data={selectedMember} onClose={() => setShowModal(false)} />
+          <div className="p-4 space-y-4" dir="rtl">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0627\u0644\u0627\u0633\u0645'}</span>
+                <p className="font-semibold">{selectedMember.name}</p>
+              </div>
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0627\u0644\u062C\u0646\u0633'}</span>
+                <p className="font-semibold">{selectedMember.gender === 'male' ? '\u0630\u0643\u0631' : '\u0623\u0646\u062B\u0649'}</p>
+              </div>
+              {selectedMember.birth_date && (
+                <div>
+                  <span className="text-xs text-text-secondary">{'\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u0645\u064A\u0644\u0627\u062F'}</span>
+                  <p className="font-semibold">{selectedMember.birth_date}</p>
+                </div>
+              )}
+              {selectedMember.death_date && (
+                <div>
+                  <span className="text-xs text-text-secondary">{'\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u0648\u0641\u0627\u0629'}</span>
+                  <p className="font-semibold">{selectedMember.death_date}</p>
+                </div>
+              )}
+              {selectedMember.city && (
+                <div>
+                  <span className="text-xs text-text-secondary">{'\u0627\u0644\u0645\u062F\u064A\u0646\u0629'}</span>
+                  <p className="font-semibold">{selectedMember.city}</p>
+                </div>
+              )}
+              {selectedMember.occupation && (
+                <div>
+                  <span className="text-xs text-text-secondary">{'\u0627\u0644\u0645\u0647\u0646\u0629'}</span>
+                  <p className="font-semibold">{selectedMember.occupation}</p>
+                </div>
+              )}
+              {selectedMember.nationality && (
+                <div>
+                  <span className="text-xs text-text-secondary">{'\u0627\u0644\u062C\u0646\u0633\u064A\u0629'}</span>
+                  <p className="font-semibold">{selectedMember.nationality}</p>
+                </div>
+              )}
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0627\u0644\u062C\u064A\u0644'}</span>
+                <p className="font-semibold">{selectedMember.generation}</p>
+              </div>
+            </div>
+
+            {selectedMember.father && (
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0627\u0644\u0623\u0628'}</span>
+                <p className="font-semibold">{selectedMember.father.name}</p>
+              </div>
+            )}
+
+            {selectedMember.mother && (
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0627\u0644\u0623\u0645'}</span>
+                <p className="font-semibold">{selectedMember.mother.name}</p>
+              </div>
+            )}
+
+            {selectedMember.mother_name && !selectedMember.mother && (
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0627\u0633\u0645 \u0627\u0644\u0623\u0645'}</span>
+                <p className="font-semibold">{selectedMember.mother_name}</p>
+              </div>
+            )}
+
+            {selectedMember.marriages && selectedMember.marriages.length > 0 && (
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0627\u0644\u0632\u064A\u062C\u0627\u062A'}</span>
+                <div className="space-y-1 mt-1">
+                  {selectedMember.marriages.map(m => (
+                    <p key={m.id} className="text-sm">
+                      {m.wife_name || '\u0632\u0648\u062C\u0629'}
+                      <span className="text-text-secondary mr-2">({m.status === 'married' ? '\u0645\u062A\u0632\u0648\u062C' : m.status === 'divorced' ? '\u0645\u0637\u0644\u0642' : m.status === 'widowed' ? '\u0623\u0631\u0645\u0644' : '\u0645\u062A\u0648\u0641\u0627\u0629'})</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedMember.children && selectedMember.children.length > 0 && (
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0627\u0644\u0623\u0628\u0646\u0627\u0621'} ({selectedMember.children.length})</span>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {selectedMember.children.map(c => (
+                    <span key={c.id} className="text-sm bg-surface px-2 py-1 rounded-lg">
+                      {c.gender === 'female' ? '\u2640' : '\u2642'} {c.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedMember.bio && (
+              <div>
+                <span className="text-xs text-text-secondary">{'\u0645\u0644\u0627\u062D\u0638\u0627\u062A'}</span>
+                <p className="text-sm whitespace-pre-wrap">{selectedMember.bio}</p>
+              </div>
+            )}
+          </div>
         )}
       </Modal>
     </div>

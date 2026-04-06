@@ -40,7 +40,7 @@ export default function SubTreeView({ data, onClose: _onClose }: Props) {
 
     const genColors = ['#6366F1', '#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE'];
 
-    // Links
+    // Links - dashed for through_mother connections
     g.selectAll('.link')
       .data(root.links())
       .join('path')
@@ -50,7 +50,10 @@ export default function SubTreeView({ data, onClose: _onClose }: Props) {
         const my = (sy + ty) / 2;
         return `M${sx},${sy} C${sx},${my} ${tx},${my} ${tx},${ty}`;
       })
-      .attr('stroke', '#D1D1D6').attr('stroke-width', 1.5).attr('fill', 'none');
+      .attr('stroke', d => (d.target.data as TreeNode).through_mother ? '#FF2D55' : '#D1D1D6')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', d => (d.target.data as TreeNode).through_mother ? '6,3' : 'none')
+      .attr('fill', 'none');
 
     // Nodes
     const nodes = g.selectAll('.node')
@@ -64,9 +67,17 @@ export default function SubTreeView({ data, onClose: _onClose }: Props) {
     nodes.append('rect')
       .attr('x', -cardW / 2).attr('y', -cardH / 2)
       .attr('width', cardW).attr('height', cardH).attr('rx', 12)
-      .attr('fill', d => d.data.death_date ? '#F9F9F9' : 'white')
-      .attr('stroke', d => d.data.id === data.member.id ? '#FF9500' : genColors[(d.data.generation || 0) % genColors.length])
+      .attr('fill', d => {
+        if (d.data.through_mother) return '#FFF5F7';
+        return d.data.death_date ? '#F9F9F9' : 'white';
+      })
+      .attr('stroke', d => {
+        if (d.data.id === data.member.id) return '#FF9500';
+        if (d.data.through_mother) return '#FF2D55';
+        return genColors[(d.data.generation || 0) % genColors.length];
+      })
       .attr('stroke-width', d => d.data.id === data.member.id ? 2.5 : 1.5)
+      .attr('stroke-dasharray', d => d.data.through_mother ? '4,2' : 'none')
       .attr('filter', 'drop-shadow(0 1px 4px rgba(0,0,0,0.06))');
 
     // Deceased icon

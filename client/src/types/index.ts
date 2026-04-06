@@ -22,6 +22,7 @@ export interface Member {
   family_id: number | null;
   family_name?: string;
   generation: number;
+  is_fund_subscriber?: boolean;
   marriages?: Marriage[];
   created_at: string;
   updated_at: string;
@@ -39,6 +40,7 @@ export interface Marriage {
 export interface TreeNode extends Member {
   children: TreeNode[];
   marriages?: Marriage[];
+  through_mother?: boolean;
 }
 
 export interface SubtreeResponse {
@@ -139,6 +141,123 @@ export interface AlliedFamily {
   description: string | null;
   member_count?: number;
   created_at: string;
+}
+
+export interface FamilyHead {
+  id: number;
+  name: string;
+  generation: number;
+  is_fund_subscriber: boolean;
+  family_members: FamilyMember[];
+  adult_count: number;
+  young_count: number;
+  child_count: number;
+  total_members: number;
+}
+
+export interface FamilyMember {
+  id: number | null;
+  name: string;
+  relationship: 'head' | 'wife' | 'child';
+  category: 'adult' | 'young' | 'child';
+}
+
+export interface EventFamily {
+  id?: number;
+  head_member_id?: number;
+  head_name: string;
+  is_subscriber: boolean;
+  adult_count: number;
+  young_count: number;
+  child_count: number;
+  total_members: number;
+  total_cost: number;
+  exempt_count: number;
+}
+
+export interface EventRates {
+  subscriber_adult: number;
+  non_subscriber_adult: number;
+  subscriber_young: number;
+  non_subscriber_young: number;
+  subscriber_child: number;
+  non_subscriber_child: number;
+}
+
+export interface EventReport {
+  event: { name: string; date: string | null; description: string | null };
+  cost_breakdown: { dinner: number; venue: number; hospitality: number; other: number };
+  subscriber_exemptions: string[];
+  non_subscriber_surcharge: number;
+  rates: EventRates;
+  summary: {
+    total_families: number;
+    subscriber_families: number;
+    non_subscriber_families: number;
+    total_adults: number;
+    total_young: number;
+    total_children: number;
+    total_people: number;
+    grand_total: number;
+  };
+  families: EventFamily[];
+}
+
+// General Family Tree types (independent from main tree)
+export interface GeneralFamily {
+  id: number;
+  name: string;
+  description: string | null;
+  source_filename: string | null;
+  member_count: number;
+  uploaded_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GeneralMember {
+  id: number;
+  family_id: number;
+  gedcom_id: string | null;
+  name: string;
+  father_id: number | null;
+  mother_id: number | null;
+  gender: 'male' | 'female';
+  birth_date: string | null;
+  death_date: string | null;
+  bio: string | null;
+  phone: string | null;
+  mother_name: string | null;
+  city: string | null;
+  nationality: string | null;
+  occupation: string | null;
+  work_type: string | null;
+  work_place: string | null;
+  generation: number;
+  marriages?: GeneralMarriage[];
+  father?: { id: number; name: string } | null;
+  mother?: { id: number; name: string } | null;
+  children?: { id: number; name: string; gender: string; birth_date: string | null; death_date: string | null }[];
+  created_at: string;
+}
+
+export interface GeneralMarriage {
+  id: number;
+  family_id: number;
+  husband_id: number;
+  wife_id: number | null;
+  wife_name: string | null;
+  status: 'married' | 'divorced' | 'widowed' | 'deceased';
+  marriage_order: number;
+}
+
+export interface GeneralTreeNode extends GeneralMember {
+  children: GeneralTreeNode[];
+}
+
+export interface GeneralTreeResponse {
+  family: GeneralFamily;
+  tree: GeneralTreeNode[];
 }
 
 export interface ExcelUploadResponse {

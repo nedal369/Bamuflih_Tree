@@ -17,7 +17,7 @@ function attachMarriages(members) {
   return members.map(m => ({ ...m, marriages: marriageMap.get(m.id) || [] }));
 }
 
-// Build tree structure from flat list
+// Build tree structure from flat list with daughters' children support
 function buildTree(members, parentId = null) {
   return members
     .filter(m => m.father_id === parentId)
@@ -27,13 +27,68 @@ function buildTree(members, parentId = null) {
     }));
 }
 
+// Build tree with daughters' children shown under them (through marriage links)
+function buildTreeWithDaughtersChildren(members) {
+  const allMarriages = db.prepare('SELECT * FROM marriages ORDER BY marriage_order').all();
+  const addedChildIds = new Set(); // track children already placed to avoid duplicates
+
+  // Create a node for a member, attaching marriage-children if female
+  function createNode(member, isThroughMother) {
+    addedChildIds.add(member.id);
+    const node = { ...member, children: [] };
+    if (isThroughMother) node.through_mother = true;
+
+    // Add direct children (via father_id)
+    const directChildren = members.filter(m => m.father_id === member.id);
+    for (const child of directChildren) {
+      if (!addedChildIds.has(child.id)) {
+        node.children.push(createNode(child, false));
+      }
+    }
+
+    // For female members, also add children through marriage
+    if (member.gender === 'female') {
+      const wifeMarriages = allMarriages.filter(m => m.wife_id === member.id);
+      for (const marriage of wifeMarriages) {
+        const husbandChildren = members.filter(m => m.father_id === marriage.husband_id);
+        for (const child of husbandChildren) {
+          if (!addedChildIds.has(child.id)) {
+            node.children.push(createNode(child, true));
+          }
+        }
+      }
+    }
+
+    return node;
+  }
+
+  // Find the root (صالح عمر بامفلح - id: 1, or first member with no father)
+  const root = members.find(m => m.id === 1) || members.find(m => !m.father_id);
+  if (!root) return [];
+
+  return [createNode(root, false)];
+}
+
+// Helper: get subscriber IDs set (from fund_subscriber_registrations OR users.is_fund_subscriber)
+function getSubscriberIds() {
+  const rows = db.prepare(`
+    SELECT m.id FROM members m
+    LEFT JOIN fund_subscriber_registrations fsr ON fsr.member_id = m.id
+    LEFT JOIN users u ON u.member_id = m.id AND u.status = 'approved'
+    WHERE fsr.id IS NOT NULL OR u.is_fund_subscriber = 1
+  `).all();
+  return new Set(rows.map(r => r.id));
+}
+
 // Get all members (flat or tree)
 router.get('/', (req, res) => {
   const members = db.prepare('SELECT * FROM members ORDER BY generation, name').all();
-  const withMarriages = attachMarriages(members);
+  const subscriberIds = getSubscriberIds();
+  const enriched = members.map(m => ({ ...m, is_fund_subscriber: subscriberIds.has(m.id) }));
+  const withMarriages = attachMarriages(enriched);
 
   if (req.query.format === 'tree') {
-    const tree = buildTree(withMarriages);
+    const tree = buildTreeWithDaughtersChildren(withMarriages);
     return res.json(tree);
   }
   res.json(withMarriages);
@@ -413,15 +468,49 @@ router.get('/:id/subtree', (req, res) => {
     return res.status(404).json({ error: 'العضو غير موجود' });
   }
 
-  const allMembers = attachMarriages(db.prepare('SELECT * FROM members').all());
+  const subscriberIds = getSubscriberIds();
+  const rawMembers = db.prepare('SELECT * FROM members').all().map(m => ({ ...m, is_fund_subscriber: subscriberIds.has(m.id) }));
+  const allMembers = attachMarriages(rawMembers);
+
+  const subtreeMarriages = db.prepare('SELECT * FROM marriages ORDER BY marriage_order').all();
+  const addedIds = new Set();
+
+  function createDescNode(m, isThroughMother) {
+    addedIds.add(m.id);
+    const node = { ...m, children: [] };
+    if (isThroughMother) node.through_mother = true;
+
+    // Direct children
+    const directChildren = allMembers.filter(c => c.father_id === m.id);
+    for (const child of directChildren) {
+      if (!addedIds.has(child.id)) {
+        node.children.push(createDescNode(child, false));
+      }
+    }
+
+    // Marriage children for female members
+    if (m.gender === 'female') {
+      const wifeMarriages = subtreeMarriages.filter(mar => mar.wife_id === m.id);
+      for (const marriage of wifeMarriages) {
+        const husbandChildren = allMembers.filter(c => c.father_id === marriage.husband_id);
+        for (const child of husbandChildren) {
+          if (!addedIds.has(child.id)) {
+            node.children.push(createDescNode(child, true));
+          }
+        }
+      }
+    }
+    return node;
+  }
 
   function getDescendants(parentId) {
     return allMembers
       .filter(m => m.father_id === parentId)
-      .map(m => ({
-        ...m,
-        children: getDescendants(m.id)
-      }));
+      .map(m => {
+        if (addedIds.has(m.id)) return null;
+        return createDescNode(m, false);
+      })
+      .filter(Boolean);
   }
 
   function getAncestors(memberId) {

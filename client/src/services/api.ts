@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage, RelationshipResult, SearchResult } from '../types';
+import type { Member, TreeNode, SubtreeResponse, Stats, AuthResponse, ExcelUploadResponse, User, Marriage, RelationshipResult, SearchResult, FamilyHead, EventReport, GeneralFamily, GeneralTreeResponse, GeneralMember } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -12,12 +12,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      // Don't clear on 403 for pending users
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      }
+    if (error.response?.status === 401 && !error.config?.url?.startsWith('/general-tree')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    } else if (error.response?.status === 403 && error.response?.data?.error === 'رمز غير صالح') {
+      // Expired or invalid JWT token - redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
@@ -184,5 +187,49 @@ export const deleteAlliedFamily = (id: number) =>
 
 export const addFamilyMember = (familyId: number, data: Record<string, unknown>) =>
   api.post(`/families/${familyId}/members`, data).then(r => r.data);
+
+// Fund Family Heads & Calculator
+export const getFamilyHeads = (childAgeMax?: number, youngAgeMax?: number) => {
+  const params = new URLSearchParams();
+  if (childAgeMax !== undefined) params.set('child_age_max', String(childAgeMax));
+  if (youngAgeMax !== undefined) params.set('young_age_max', String(youngAgeMax));
+  const query = params.toString();
+  return api.get<FamilyHead[]>(`/fund/family-heads${query ? '?' + query : ''}`).then(r => r.data);
+};
+
+export const calculateFamilies = (eventId: number, familyHeadIds: number[]) =>
+  api.post(`/fund/events/${eventId}/calculate-families`, { family_head_ids: familyHeadIds }).then(r => r.data);
+
+export const getEventReport = (eventId: number) =>
+  api.get<EventReport>(`/fund/events/${eventId}/report`).then(r => r.data);
+
+// General Tree (independent - public read, admin write)
+export const getGeneralFamilies = () =>
+  api.get<GeneralFamily[]>('/general-tree/families').then(r => r.data);
+
+export const getGeneralFamilyTree = (familyId: number) =>
+  api.get<GeneralTreeResponse>(`/general-tree/families/${familyId}/tree`).then(r => r.data);
+
+export const getGeneralFamilyMembers = (familyId: number) =>
+  api.get<GeneralMember[]>(`/general-tree/families/${familyId}/members`).then(r => r.data);
+
+export const getGeneralMember = (id: number) =>
+  api.get<GeneralMember>(`/general-tree/members/${id}`).then(r => r.data);
+
+export const importGeneralTreeGedcom = (file: File, name: string, description?: string) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('name', name);
+  if (description) formData.append('description', description);
+  return api.post('/general-tree/families/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+
+export const updateGeneralFamily = (id: number, data: { name?: string; description?: string }) =>
+  api.put(`/general-tree/families/${id}`, data).then(r => r.data);
+
+export const deleteGeneralFamily = (id: number) =>
+  api.delete(`/general-tree/families/${id}`).then(r => r.data);
 
 export default api;

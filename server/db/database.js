@@ -150,6 +150,58 @@ db.exec(`
   );
 `);
 
+// General Family Tree tables (independent from main tree)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS general_families (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    source_filename TEXT,
+    member_count INTEGER DEFAULT 0,
+    uploaded_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS general_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    family_id INTEGER NOT NULL REFERENCES general_families(id) ON DELETE CASCADE,
+    gedcom_id TEXT,
+    name TEXT NOT NULL,
+    father_id INTEGER REFERENCES general_members(id) ON DELETE SET NULL,
+    mother_id INTEGER REFERENCES general_members(id) ON DELETE SET NULL,
+    gender TEXT CHECK(gender IN ('male', 'female')) DEFAULT 'male',
+    birth_date TEXT,
+    death_date TEXT,
+    bio TEXT,
+    phone TEXT,
+    mother_name TEXT,
+    city TEXT,
+    nationality TEXT,
+    occupation TEXT,
+    work_type TEXT,
+    work_place TEXT,
+    generation INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS general_marriages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    family_id INTEGER NOT NULL REFERENCES general_families(id) ON DELETE CASCADE,
+    husband_id INTEGER NOT NULL REFERENCES general_members(id) ON DELETE CASCADE,
+    wife_id INTEGER REFERENCES general_members(id) ON DELETE SET NULL,
+    wife_name TEXT,
+    status TEXT CHECK(status IN ('married', 'divorced', 'widowed', 'deceased')) DEFAULT 'married',
+    marriage_order INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_general_members_family ON general_members(family_id)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_general_members_father ON general_members(father_id)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_general_marriages_family ON general_marriages(family_id)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_general_marriages_husband ON general_marriages(husband_id)');
+
 // Add columns if they don't exist (for existing databases)
 const memberCols = db.prepare("PRAGMA table_info(members)").all().map(c => c.name);
 if (!memberCols.includes('city')) db.exec('ALTER TABLE members ADD COLUMN city TEXT');
@@ -175,6 +227,51 @@ if (!userCols.includes('status')) db.exec('ALTER TABLE users ADD COLUMN status T
 if (!userCols.includes('permission_type')) db.exec("ALTER TABLE users ADD COLUMN permission_type TEXT DEFAULT 'own_subtree'");
 if (!userCols.includes('allowed_subtrees')) db.exec('ALTER TABLE users ADD COLUMN allowed_subtrees TEXT');
 if (!userCols.includes('is_fund_subscriber')) db.exec('ALTER TABLE users ADD COLUMN is_fund_subscriber INTEGER DEFAULT 0');
+
+// Add itemized cost columns to fund_events
+const eventCols = db.prepare("PRAGMA table_info(fund_events)").all().map(c => c.name);
+if (!eventCols.includes('dinner_cost')) db.exec('ALTER TABLE fund_events ADD COLUMN dinner_cost REAL DEFAULT 0');
+if (!eventCols.includes('venue_cost')) db.exec('ALTER TABLE fund_events ADD COLUMN venue_cost REAL DEFAULT 0');
+if (!eventCols.includes('hospitality_cost')) db.exec('ALTER TABLE fund_events ADD COLUMN hospitality_cost REAL DEFAULT 0');
+if (!eventCols.includes('other_cost')) db.exec('ALTER TABLE fund_events ADD COLUMN other_cost REAL DEFAULT 0');
+if (!eventCols.includes('subscriber_exemptions')) db.exec("ALTER TABLE fund_events ADD COLUMN subscriber_exemptions TEXT DEFAULT '[]'");
+if (!eventCols.includes('non_subscriber_surcharge')) db.exec('ALTER TABLE fund_events ADD COLUMN non_subscriber_surcharge REAL DEFAULT 0');
+
+// Create fund_event_families table for family-based cost tracking
+db.exec(`
+  CREATE TABLE IF NOT EXISTS fund_event_families (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES fund_events(id) ON DELETE CASCADE,
+    head_member_id INTEGER NOT NULL REFERENCES members(id),
+    is_subscriber INTEGER DEFAULT 0,
+    adult_count INTEGER DEFAULT 0,
+    young_count INTEGER DEFAULT 0,
+    child_count INTEGER DEFAULT 0,
+    total_cost REAL DEFAULT 0,
+    exempt_count INTEGER DEFAULT 0,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_event_families_event ON fund_event_families(event_id)');
+
+// Subscriber registrations table — members enrolled as fund subscribers with unique codes
+db.exec(`
+  CREATE TABLE IF NOT EXISTS fund_subscriber_registrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER NOT NULL UNIQUE REFERENCES members(id) ON DELETE CASCADE,
+    subscriber_code TEXT UNIQUE NOT NULL,
+    monthly_amount REAL DEFAULT 100,
+    registered_date TEXT NOT NULL,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_subscriber_reg_member ON fund_subscriber_registrations(member_id)');
+
+// Migration: rename manual_exempt to exempt_count if needed
+const fefCols = db.prepare("PRAGMA table_info(fund_event_families)").all().map(c => c.name);
+if (!fefCols.includes('exempt_count')) db.exec('ALTER TABLE fund_event_families ADD COLUMN exempt_count INTEGER DEFAULT 0');
 
 // Create marriages table index
 db.exec('CREATE INDEX IF NOT EXISTS idx_marriages_husband ON marriages(husband_id)');
